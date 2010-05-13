@@ -65,7 +65,7 @@ sub my_setxattr {
 
     # check flags here;
     
-    print "> setxattr (".$file->orig.") -> ($xattr_key = $xattr_value => $flags)\n";
+    print "> setxattr (".$file->orig.") -> ($xattr_key = $xattr_value => $flags)\n" if($params{trace} > 1);
 
 
     my $parent = RiakFuse::Data->get($file->parent);
@@ -79,7 +79,7 @@ sub my_setxattr {
 sub my_getxattr {
     my $file = RiakFuse::Filepath->new(shift());
     my $xattr = shift;
-    print "> getxattr (".$file->orig.") -> ($xattr)\n";
+    print "> getxattr (".$file->orig.") -> ($xattr)\n" if($params{trace} > 1);
 
     my $parent = RiakFuse::Data->get($file->parent);
     
