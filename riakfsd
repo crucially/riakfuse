@@ -29,7 +29,7 @@ die "Please tell me the name of the filesystem (--fsname=mytestfs) (maps to a bu
 die "Please tell me where to mount it (--mount=/tmp/myfs) (where to mount)\n" unless $mountpoint;
 
 RiakFuse::conf(
-    mountpoint => "/tmp/foo",
+    mountpoint => "$mountpoint",
     trace => $trace,
     debug => $debug,
     threaded => 1,
