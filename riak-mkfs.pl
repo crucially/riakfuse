@@ -1,13 +1,24 @@
+#!/usr/bin/perl
 use strict;
 use warnings;
 
-my $fsname = shift;
-my $server = shift || "127.0.0.1:8091";
+use Getopt::Long;
+
+my $fsname;
+my $server;
+my $clean = 0;
+
+GetOptions("clean"     => \$clean,
+	   "server=s"  => \$server,
+	   "fsname=s"  => \$fsname,
+    );
+die "Please tell me what server I should be using (--server=127.0.0.1:8091)\n" unless $server;
+die "Please tell me the name of the filesystem (--fsname=mytestfs) (maps to a bucket)\n" unless $fsname;
 
 use LWP::UserAgent;
 use JSON;
 
-{
+if($clean) {
     my $keys = from_json(
 	LWP::UserAgent->new->request(
 	    HTTP::Request->new("GET", "http://$server/riak/$fsname?keys=yes&props=false")
