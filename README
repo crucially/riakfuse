@@ -2,7 +2,7 @@ This is a filesystem backed by Riak.
 
 Because there is no write caching, larger files are very slow. 
 
-run riak-mkfs to init the filesystem with a root directory
+run mkfs.riak to init the filesystem with a root directory
 
 there are no hardlinks, symlinks and you can't move directories
 
