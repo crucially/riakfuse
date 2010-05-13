@@ -5,7 +5,7 @@ package RiakFuse;
 use threads;
 use threads::shared;
 
-use RiakFuse::Metadata;
+
 use RiakFuse::Filepath;
 use RiakFuse::Data;
 use Data::Dumper;
@@ -13,7 +13,7 @@ use HTTP::Date;
 our %params;
 use POSIX qw(ENOTEMPTY ENOENT EEXIST EACCES);
 my $fuse;
-my $metadata = 'RiakFuse::Metadata'; 
+
 use Fuse qw(:xattr);
 
 RiakFuse::HTTP->init;
