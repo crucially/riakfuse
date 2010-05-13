@@ -6,6 +6,16 @@ run riak-mkfs to init the filesystem with a root directory
 
 there are no hardlinks, symlinks and you can't move directories
 
+Get started
+
+install JSON.pm
+install Fuse (MacFuse on OSX)
+install Fuse.pm
+
+mkfs.riak --server=127.0.0.1:8091 --fsname=testfs
+mkdir /tmp/foo
+riakfsd  --server=127.0.0.1:8091 --fsname=testfs --mount=/tmp/foo
+
 TODO
 
 * chown
