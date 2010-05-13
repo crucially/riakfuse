@@ -23,3 +23,5 @@ TODO
 * HEAD requests when needed
 * If-Match for edits and restart them if they fail
 * Proper vector clock support
+
+* once the semantics are done, rewrite in C for speed
