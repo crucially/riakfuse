@@ -74,6 +74,8 @@ sub conf {
 	);
 }
 
+
+
 my $last_server;
 sub get_server {
 
@@ -284,7 +286,7 @@ sub my_read {
     my $file = RiakFuse::Filepath->new(shift());
     my $request_size = shift;
     my $offset = shift;
-    return RiakFuse::Stats->stats_open($file, $request_size, $offset) if ($file->orig =~/^\/.riakfs/);
+    return RiakFuse::Stats->stats_read($file, $request_size, $offset) if ($file->orig =~/^\/.riakfs/);
 
     my $content = RiakFuse::Data->get($file)->{content};
     print "> read $request_size att offset $offset from file " . $file->key . "\n"  if($params{trace} > 3);

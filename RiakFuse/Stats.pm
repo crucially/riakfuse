@@ -68,8 +68,15 @@ sub start {
 }
 
 sub get_servers {
-
-    
+    my $content = "# server status\n";
+    foreach my $server (keys %RiakFuse::servers) {
+	if($RiakFuse::servers{$server}) {
+	    $content .= "$server\tup\n";
+	} else {
+	    $content .= "$server\tdown\n";
+	}
+    }
+    return $content;
 }
 
 
@@ -89,7 +96,7 @@ sub getattr {
 	fuse_get_context()->{"uid"},
 	fuse_get_context()->{"gid"},
 	0,
-	1,
+	length(get_servers()),
 	time(),
 	time(),
 	time(),
@@ -113,7 +120,7 @@ sub stats_read {
     my $file = shift;
 
     if ($file->name eq 'servers') {
-	return "";
+	return get_servers;
     }
     return -ENOENT();
 }
