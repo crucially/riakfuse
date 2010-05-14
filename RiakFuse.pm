@@ -21,7 +21,7 @@ use Fuse qw(:xattr fuse_get_context);
 use URI::Escape;
 
 our %servers : shared;
-
+our @servers : shared;
 
 sub conf {
     my %opts = @_;
@@ -32,18 +32,19 @@ sub conf {
     $params{bufferdir}  = $opts{bufferdir} || die;
     $params{filebucket} = $opts{filebucket} || die;
     $params{logbucket}  = $opts{logbucket} || die;
-    $params{server}     = $opts{server} || die;
-
+    $params{servers}    = $opts{servers} || die;
 
     threads->new(
 	sub {
 	    RiakFuse::Stats->start(\%params);
 	})->detach;
 
-    while (keys %servers == 0) {
-	print STDERR "Trying to connect to $params{server}\n";
-	lock(%servers);
-	cond_wait(%servers);
+    {
+	while (keys %servers == 0) {
+	    print STDERR "Trying to connect to servers ( ". join(' ,', @{$params{servers}}) . " )\n";
+	    lock(%servers);
+	    cond_wait(%servers) if(keys %servers == 0);
+	}
     }
 
     $fuse = Fuse::main(
@@ -71,6 +72,22 @@ sub conf {
 	setxattr => "RiakFuse::my_setxattr",
 	getxattr => "RiakFuse::my_getxattr",
 	);
+}
+
+my $last_server;
+sub get_server {
+
+    # prefer the previous server
+    # since it is likely we have keep alive
+    return $last_server if($last_server && $servers{$last_server});
+
+    # XX deal with the case of no active servers
+    my @active_servers;
+    foreach my $server (keys %servers) {
+	push @active_servers, $server if($servers{$server});
+    }
+    $last_server = $active_servers[rand @active_servers];
+    return $last_server;
 }
 
 sub my_setxattr {

@@ -28,9 +28,11 @@ sub start {
     $servers = \%RiakFuse::servers;
  
 
+    RiakFuse::HTTP->timeout(1);
+
 # disable this until I can get the server list from riak
 #    # get initial list
-#    RiakFuse::HTTP->timeout(1);
+
 #    my $resp = RiakFuse::HTTP->raw("GET","$params->{server}/stats");
 #    if (!$resp->is_success) {
 #	print "Cannot reach server $params->{server}\n";
@@ -38,9 +40,30 @@ sub start {
 #    }
 #    my $stats = from_json($resp->content);
 
+    lock(%RiakFuse::servers);
 
-
-    print Dumper(from_json($resp->content));
+    for my $server (@{$params->{servers}}) {
+	{
+	    my $resp = RiakFuse::HTTP->raw("GET","http://$server/stats");
+	    if($resp->is_success) {
+		$RiakFuse::servers{$server} = 1;
+	    } else {
+		$RiakFuse::servers{$server} = 0;
+	    }
+	}
+	threads->new(sub {
+	    RiakFuse::HTTP->timeout(1);
+	    while(1) {
+		sleep 1;
+		my $resp = RiakFuse::HTTP->raw("GET","http://$server/stats");
+		if($resp->is_success) {
+		    $RiakFuse::servers{$server} = 1;
+		} else {
+		    $RiakFuse::servers{$server} = 0;
+		}
+	    }})->detach;
+    }
+    cond_signal(%RiakFuse::servers);
 
 }
 

@@ -41,8 +41,9 @@ sub put {
     if($mime eq 'application/json') {
 	$obj = to_json($obj);
     }
+    my $server = RiakFuse->get_server;
 #    print ">> PUT '$RiakFuse::params{server}/riak/$RiakFuse::params{filebucket}/$key'\n";
-    my $req = HTTP::Request->new("PUT", "$RiakFuse::params{server}/riak/$RiakFuse::params{filebucket}/$key");
+    my $req = HTTP::Request->new("PUT", "http://$server/riak/$RiakFuse::params{filebucket}/$key");
     $req->header("Content-Type", $mime);
     $req->header("X-Riak-Client-Id", $id);
     $req->content($obj || "");
@@ -61,8 +62,10 @@ sub fetch {
     my $key    = shift;
     my $cond   = shift;
     my $method = shift;
-#    print ">> Fetching $method '$RiakFuse::params{server}/riak/$RiakFuse::params{filebucket}/$key'\n";
-    my $req = HTTP::Request->new($method, "$RiakFuse::params{server}/riak/$RiakFuse::params{filebucket}/$key");
+    my $server = RiakFuse->get_server;
+#   print ">> Fetching $method 'http://$server/riak/$RiakFuse::params{filebucket}/$key'\n";
+
+    my $req = HTTP::Request->new($method, "http://$server/riak/$RiakFuse::params{filebucket}/$key");
     $req->header("X-Riak-Client-Id", $id);
     if($cond) {
 #	print ">>> Conditional get $cond\n";
@@ -126,8 +129,9 @@ sub head {
 sub delete {
     my $class = shift;
     my $key = shift;
+    my $server = RiakFuse->get_server;
 #    print ">> DELETE http://127.0.0.1:8091/riak/$RiakFuse::params{filebucket}/$key\n";
-    my $req = HTTP::Request->new("DELETE", "http://127.0.0.1:8091/riak/$RiakFuse::params{filebucket}/$key");
+    my $req = HTTP::Request->new("DELETE", "http://$server/riak/$RiakFuse::params{filebucket}/$key");
     $req->header("X-Riak-Client-Id", $id);
     my $resp = $ua->request($req);
     if($resp->is_success) {
