@@ -16,7 +16,7 @@ my $fuse;
 
 use Fuse qw(:xattr fuse_get_context);
 
-RiakFuse::HTTP->init;
+
 use URI::Escape;
 
 sub conf {
