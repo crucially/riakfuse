@@ -19,6 +19,19 @@ sub CLONE {
     $ua = LWP::UserAgent->new();
 }
 
+sub timeout {
+    my $class = shift;
+    $ua->timeout(shift);
+}
+
+sub raw {
+    my $class = shift;
+    my $method = shift;
+    my $url = shift;
+    my $req = HTTP::Request->new($method, $url);
+    return $ua->request($req);
+}
+
 sub put {
     my $class = shift;
     my $key = shift;

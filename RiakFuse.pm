@@ -13,11 +13,15 @@ use HTTP::Date;
 our %params;
 use POSIX qw(ENOTEMPTY ENOENT EEXIST EACCES);
 my $fuse;
+use RiakFuse::Stats;
 
 use Fuse qw(:xattr fuse_get_context);
 
 
 use URI::Escape;
+
+our %servers : shared;
+
 
 sub conf {
     my %opts = @_;
@@ -29,6 +33,18 @@ sub conf {
     $params{filebucket} = $opts{filebucket} || die;
     $params{logbucket}  = $opts{logbucket} || die;
     $params{server}     = $opts{server} || die;
+
+
+    threads->new(
+	sub {
+	    RiakFuse::Stats->start(\%params);
+	})->detach;
+
+    while (keys %servers == 0) {
+	print STDERR "Trying to connect to $params{server}\n";
+	lock(%servers);
+	cond_wait(%servers);
+    }
 
     $fuse = Fuse::main(
 	mountpoint => $params{mountpoint},
@@ -224,8 +240,11 @@ sub my_mkdir {
 
 
 sub my_open {
-    print "> open\n" if($params{trace} > 3);
     my $file = RiakFuse::Filepath->new(shift());
+    print "> open $file->{orig}\n" if($params{trace} > 3);
+
+    return RiakFuse::Stats->stats_open($file) if ($file->orig =~/^\/.riakfs/);
+
     my $flags = shift;
     my $obj = RiakFuse::Data->get($file);
     if(ref($obj)) {
@@ -248,6 +267,8 @@ sub my_read {
     my $file = RiakFuse::Filepath->new(shift());
     my $request_size = shift;
     my $offset = shift;
+    return RiakFuse::Stats->stats_open($file, $request_size, $offset) if ($file->orig =~/^\/.riakfs/);
+
     my $content = RiakFuse::Data->get($file)->{content};
     print "> read $request_size att offset $offset from file " . $file->key . "\n"  if($params{trace} > 3);
     
@@ -302,8 +323,20 @@ sub my_mknod {
 sub my_getdir {
     print "> getdir\n" if($params{trace} > 3);
     my $file = RiakFuse::Filepath->new(shift());
+    
+    if($file->orig =~/^\/.riakfs/) {
+	return (RiakFuse::Stats->getdir($file), 0);
+    }
+
     my $obj = RiakFuse::Data->get($file);
-    return (map { uri_unescape($_) } keys %{$obj->{content}}, 0);
+    my @rv = map { uri_unescape($_) } keys %{$obj->{content}};
+
+    #magic subdir full of stats
+
+    if ($file->key eq '%2F') {
+	push @rv,".riakfs";
+    }
+    return (@rv, 0);
 }
 
 sub my_statfs {
@@ -314,7 +347,11 @@ sub my_statfs {
 
 sub my_getattr {
     my $file = RiakFuse::Filepath->new(shift());
-    print "> getattr " . $file->orig . "(" . $file->key . ")\n"  if($params{trace} > 10);
+    print "> getattr " . $file->orig . " (" . $file->key . ")\n"  if($params{trace} > 10);
+
+    if ($file->orig =~/^\/.riakfs/) {
+	return RiakFuse::Stats->getattr($file);
+    }
 
     #XXX use head here
     my $node = RiakFuse::Data->get($file);
