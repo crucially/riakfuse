@@ -17,12 +17,14 @@ die "Please tell me the name of the filesystem (--fsname=mytestfs) (maps to a bu
 
 use LWP::UserAgent;
 use JSON;
+my %OPTS = @LWP::Protocol::http::EXTRA_SOCK_OPTS;
+$OPTS{MaxLineLength} = 4194304;
+@LWP::Protocol::http::EXTRA_SOCK_OPTS = %OPTS;
 
 if($clean) {
-    my $keys = from_json(
-	LWP::UserAgent->new->request(
-	    HTTP::Request->new("GET", "http://$server/riak/$fsname?keys=yes&props=false")
-	)->content);
+    my $resp = LWP::UserAgent->new->request(HTTP::Request->new("GET", "http://$server/riak/$fsname?keys=yes&props=false"));
+
+    my $keys = from_json($resp->content);
     foreach my $key (@{$keys->{keys}}) {
 	print "delete $key\n";
 	print LWP::UserAgent->new->request(
