@@ -14,7 +14,7 @@ our %params;
 use POSIX qw(ENOTEMPTY ENOENT EEXIST EACCES);
 my $fuse;
 
-use Fuse qw(:xattr);
+use Fuse qw(:xattr fuse_get_context);
 
 RiakFuse::HTTP->init;
 use URI::Escape;
@@ -72,7 +72,7 @@ sub my_setxattr {
     return -ENOENT() unless ref $parent;
     return -ENOENT() unless exists $parent->{content}->{$file->name};
     $parent->{content}->{$file->name}->{xattr}->{$xattr_key} = $xattr_value;
-    RiakFuse::Data->put($file->parent);
+    RiakFuse::Data->put($file->parent, "application/json", $parent->{content});
     return 0;
 }
 
@@ -82,8 +82,6 @@ sub my_getxattr {
     print "> getxattr (".$file->orig.") -> ($xattr)\n" if($params{trace} > 1);
 
     my $parent = RiakFuse::Data->get($file->parent);
-    
-
 
     return -ENOENT() unless ref $parent;
     return -ENOENT() unless exists $parent->{content}->{$file->name};
@@ -108,6 +106,18 @@ sub my_chmod {
 sub my_chown {
     my $file = RiakFuse::Filepath->new(shift());
     print "> chown(".$file->orig.")\n" if($params{trace} > 3);
+    my $uid = shift;
+    my $gid = shift;
+
+    my $parent = RiakFuse::Data->get($file->parent);
+
+    return -ENOENT() unless ref $parent;
+    return -ENOENT() unless exists $parent->{content}->{$file->name};
+
+    $parent->{content}->{$file->name}->{uid} = $uid;
+    $parent->{content}->{$file->name}->{gid} = $gid;
+
+    RiakFuse::Data->put($file->parent, "application/json", $parent->{content});
     return 0;
 }
 
@@ -168,9 +178,8 @@ sub my_rmdir {
 }
 
 sub my_unlink {
-    print "> unlink\n" if($params{trace} > 3);
     my $file = RiakFuse::Filepath->new(shift());
-
+    print "> unlink ($file->{orig})\n" if($params{trace} > 3);
     my $dir = RiakFuse::Data->get($file->parent);
     delete($dir->{content}->{$file->name});
     RiakFuse::Data->put($file->parent, "application/json", $dir->{content});
@@ -203,6 +212,8 @@ sub my_mkdir {
 			    filename => $file->orig,
 			    mode => $mode,
 			    type => $type,
+			    uid  => fuse_get_context()->{"uid"},
+			    gid  => fuse_get_context()->{"gid"},
     };
 
 
@@ -245,8 +256,8 @@ sub my_read {
 
 
 sub my_write {
-    print "> write\n" if($params{trace} > 3);
     my $file = RiakFuse::Filepath->new(shift());
+    print "> write ($file->{orig})\n" if($params{trace} > 3);
     my $buffer = shift;
     my $offset = shift;
     my $len = length($buffer);
@@ -259,8 +270,8 @@ sub my_write {
 
 
 sub my_mknod {
-    print "> mknod\n" if($params{trace} > 3);
     my $file = RiakFuse::Filepath->new(shift());
+    print "> mknod ($file->{orig})\n" if($params{trace} > 3);
     my $mode = shift;
     my $dev = shift;
     my $type = $mode >> 9;
@@ -276,7 +287,10 @@ sub my_mknod {
 	ctime => time,
 	filename => $file->name,
 	mode => $mode,
-	type => $type};
+	type => $type,
+	uid  => fuse_get_context()->{"uid"},
+	gid  => fuse_get_context()->{"gid"},
+    };
 
     RiakFuse::Data->put($file->parent, "application/json", $node->{content});
 
@@ -293,14 +307,14 @@ sub my_getdir {
 }
 
 sub my_statfs {
-    print "> statfs\n" if($params{trace} > 3);
+    print "> statfs\n" if($params{trace} > 6);
     return 255, 1, 1, 256*1024, 256*1024, 2;
 }
 
 
 sub my_getattr {
     my $file = RiakFuse::Filepath->new(shift());
-    print "> getattr " . $file->orig . "(" . $file->key . ")\n"  if($params{trace} > 3);
+    print "> getattr " . $file->orig . "(" . $file->key . ")\n"  if($params{trace} > 10);
 
     #XXX use head here
     my $node = RiakFuse::Data->get($file);
@@ -319,8 +333,8 @@ sub my_getattr {
 	0,
 	$stat->{mode} + ($stat->{type} <<9),
 	2,
-	501,
-	0,
+	$stat->{uid},
+	$stat->{gid},
 	0, #rdev
 	$node->{'content-length'}, #size
 	$stat->{atime},

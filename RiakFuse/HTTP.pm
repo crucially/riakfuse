@@ -1,7 +1,7 @@
 
 use strict;
 use warnings;
-
+use Carp;
 package RiakFuse::HTTP;
 use LWP::UserAgent;
 use HTTP::Request;
@@ -11,6 +11,7 @@ my $ua;
 use HTTP::Date;
 use Sys::Hostname;
 use Data::Dumper;
+use Carp;
 
 our $id = hostname();
 
@@ -23,6 +24,7 @@ sub put {
     my $key = shift;
     my $mime = shift;
     my $obj = shift;
+    confess "No mimetype\n" unless($mime);
     if($mime eq 'application/json') {
 	$obj = to_json($obj);
     }

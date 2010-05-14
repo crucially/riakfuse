@@ -35,11 +35,14 @@ if($clean) {
 
     my $req = HTTP::Request->new("PUT", "http://$server/riak/$fsname/%2F");
     $req->content_type("application/json");
+
     $req->content(to_json({
 	'.' => {
 	    key => '%2F',
 	    ctime => time,
 	    atime => time,
+	    uid  => $<,
+	    gid  => int($(),
 	    mode => 0755,
 	    type => 0040,
 	},
