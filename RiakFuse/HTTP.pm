@@ -15,7 +15,7 @@ use Carp;
 
 our $id = hostname();
 
-sub init {
+sub CLONE {
     $ua = LWP::UserAgent->new();
 }
 
@@ -113,6 +113,7 @@ sub head {
 sub delete {
     my $class = shift;
     my $key = shift;
+#    print ">> DELETE http://127.0.0.1:8091/riak/$RiakFuse::params{filebucket}/$key\n";
     my $req = HTTP::Request->new("DELETE", "http://127.0.0.1:8091/riak/$RiakFuse::params{filebucket}/$key");
     $req->header("X-Riak-Client-Id", $id);
     my $resp = $ua->request($req);
