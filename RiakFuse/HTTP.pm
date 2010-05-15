@@ -28,6 +28,7 @@ sub raw {
     my $class = shift;
     my $method = shift;
     my $url = shift;
+    RiakFuse::Stats->increment("http_raw_$method");
     my $req = HTTP::Request->new($method, $url);
     return $ua->request($req);
 }
@@ -41,8 +42,9 @@ sub put {
     if($mime eq 'application/json') {
 	$obj = to_json($obj);
     }
+    RiakFuse::Stats->increment("http_put");
     my $server = RiakFuse->get_server;
-#    print ">> PUT '$RiakFuse::params{server}/riak/$RiakFuse::params{filebucket}/$key'\n";
+    print ">> PUT 'http://$server/riak/$RiakFuse::params{filebucket}/$key'\n" if($RiakFuse::params{trace} > 15);
     my $req = HTTP::Request->new("PUT", "http://$server/riak/$RiakFuse::params{filebucket}/$key");
     $req->header("Content-Type", $mime);
     $req->header("X-Riak-Client-Id", $id);
@@ -63,8 +65,9 @@ sub fetch {
     my $cond   = shift;
     my $method = shift;
     my $server = RiakFuse->get_server;
-#   print ">> Fetching $method 'http://$server/riak/$RiakFuse::params{filebucket}/$key'\n";
+   print ">> Fetching $method 'http://$server/riak/$RiakFuse::params{filebucket}/$key'\n" if($RiakFuse::params{trace} > 15);
 
+    RiakFuse::Stats->increment("http_fetch_$method");
     my $req = HTTP::Request->new($method, "http://$server/riak/$RiakFuse::params{filebucket}/$key");
     $req->header("X-Riak-Client-Id", $id);
     if($cond) {
@@ -108,6 +111,9 @@ sub fetch {
     } elsif ($resp->code == 404) {
 	return -ENOENT();
     } else {
+	print $resp->code ."\n";
+	print $resp->status_line . "\n";
+	print $resp->as_string . "\n";
 	return -EIO();
     }
 }
@@ -130,7 +136,8 @@ sub delete {
     my $class = shift;
     my $key = shift;
     my $server = RiakFuse->get_server;
-#    print ">> DELETE http://127.0.0.1:8091/riak/$RiakFuse::params{filebucket}/$key\n";
+    print ">> DELETE http://$server/riak/$RiakFuse::params{filebucket}/$key\n" if($RiakFuse::params{trace} > 15);
+    RiakFuse::Stats->increment("http_delete");
     my $req = HTTP::Request->new("DELETE", "http://$server/riak/$RiakFuse::params{filebucket}/$key");
     $req->header("X-Riak-Client-Id", $id);
     my $resp = $ua->request($req);
