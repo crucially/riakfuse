@@ -11,11 +11,25 @@ use threads;
 use threads::shared;
 use Data::Dumper;
 
+my %files = (
+    servers => \&get_servers,
+    counters => \&get_counters,,
+    );
+
+
+my %counters : shared;
+
+sub increment {
+    my $class = shift;
+    my $counter = shift;
+    $counters{$counter}++;
+}
+
 sub getdir {
     my $class = shift;
     my $file = shift;
 
-    return ("servers", "..",".");
+    return (keys %files, "..",".");
 }
 
 
@@ -79,10 +93,13 @@ sub get_servers {
     return $content;
 }
 
-
-my %files = (
-    servers => 1,
-    );
+sub get_counters {
+    my $content;
+    foreach my $key (sort keys %counters) {
+	$content .= "$key\t$counters{$key}\n";
+    }
+    return $content;
+}
 
 sub getattr {
     my $class = shift;
@@ -96,7 +113,7 @@ sub getattr {
 	fuse_get_context()->{"uid"},
 	fuse_get_context()->{"gid"},
 	0,
-	length(get_servers()),
+	0,
 	time(),
 	time(),
 	time(),
@@ -107,6 +124,7 @@ sub getattr {
 	$resp[2] = 0555 + (0040 << 9);
     } elsif (exists $files{$file->name}) {
 	$resp[2] = 0555 + (64 << 9);
+	$resp[7] = length($files{$file->name}->());
     } else {
 	return -ENOENT();
     }
@@ -118,9 +136,11 @@ sub getattr {
 sub stats_read {
     my $class = shift;
     my $file = shift;
+    my $request_size = shift;
+    my $offset = shift;
 
-    if ($file->name eq 'servers') {
-	return get_servers;
+    if(exists $files{$file->name}) {
+	return substr($files{$file->name}->(), $offset, $request_size);
     }
     return -ENOENT();
 }
@@ -131,7 +151,7 @@ sub stats_open {
     my $class = shift;
     my $file = shift;
 
-    if ($file->name eq 'servers') {
+    if(exists $files{$file->name}) {
 	return 0;
     }
 

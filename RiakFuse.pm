@@ -74,7 +74,9 @@ sub conf {
 	);
 }
 
-
+sub CLONE {
+    RiakFuse::Stats->increment("threads");
+}
 
 my $last_server;
 sub get_server {
@@ -97,7 +99,7 @@ sub my_setxattr {
     my $xattr_key   = shift;
     my $xattr_value = shift;
     my $flags = shift;
-
+    RiakFuse::Stats->increment("setxattr");
     # check flags here;
     
     print "> setxattr (".$file->orig.") -> ($xattr_key = $xattr_value => $flags)\n" if($params{trace} > 1);
@@ -115,7 +117,7 @@ sub my_getxattr {
     my $file = RiakFuse::Filepath->new(shift());
     my $xattr = shift;
     print "> getxattr (".$file->orig.") -> ($xattr)\n" if($params{trace} > 1);
-
+    RiakFuse::Stats->increment("getxattr");
     my $parent = RiakFuse::Data->get($file->parent);
 
     return -ENOENT() unless ref $parent;
@@ -129,18 +131,21 @@ sub my_getxattr {
 sub my_utime {
     my $file = RiakFuse::Filepath->new(shift());
     print "> utime (".$file->orig.")\n" if($params{trace} > 3);
+    RiakFuse::Stats->increment("utime");
     return 0;
 }
 
 sub my_chmod {
     my $file = RiakFuse::Filepath->new(shift());
     print "> chmod (".$file->orig.")\n" if($params{trace} > 3);
+    RiakFuse::Stats->increment("chmod");
     return 0;
 }
 
 sub my_chown {
     my $file = RiakFuse::Filepath->new(shift());
     print "> chown(".$file->orig.")\n" if($params{trace} > 3);
+    RiakFuse::Stats->increment("chown");
     my $uid = shift;
     my $gid = shift;
 
@@ -159,12 +164,14 @@ sub my_chown {
 sub my_release {
     my $file = RiakFuse::Filepath->new(shift());
     print "> release (".$file->orig.")\n" if($params{trace} > 3);
+    RiakFuse::Stats->increment("release");
     return 0;
 }
 
 sub my_flush {
     my $file = RiakFuse::Filepath->new(shift());
     print "> flush (".$file->orig.")\n" if($params{trace} > 3);
+    RiakFuse::Stats->increment("flush");
     return 0;
 }
 
@@ -173,7 +180,7 @@ sub my_rename {
     my $old = RiakFuse::Filepath->new(shift());
     my $new = RiakFuse::Filepath->new(shift());
     
-    
+    RiakFuse::Stats->increment("rename");
     my $old_parent = RiakFuse::Data->get($old->parent);
     
     if($old_parent->{content}->{$old->name}->{type} == 32) {
@@ -200,6 +207,7 @@ sub my_rename {
 sub my_rmdir {
     my $file = RiakFuse::Filepath->new(shift());
     print "> rmdir ($file->{orig})\n" if($params{trace} > 3);
+    RiakFuse::Stats->increment("rmdir");
     my $obj = RiakFuse::Data->get($file);
     if(ref($obj->{content}) && keys %{$obj->{content}} > 2) {
 	return -ENOTEMPTY();
@@ -215,6 +223,7 @@ sub my_rmdir {
 sub my_unlink {
     my $file = RiakFuse::Filepath->new(shift());
     print "> unlink ($file->{orig})\n" if($params{trace} > 3);
+    RiakFuse::Stats->increment("unlink");
     my $dir = RiakFuse::Data->get($file->parent);
     delete($dir->{content}->{$file->name});
     RiakFuse::Data->put($file->parent, "application/json", $dir->{content});
@@ -224,6 +233,7 @@ sub my_unlink {
 sub my_mkdir {
     my $file = RiakFuse::Filepath->new(shift());
     print "> mkdir " . $file->key . "\n" if($params{trace} > 3);
+    RiakFuse::Stats->increment("mkdir");
     my $mode = shift;
     my $type = $mode >> 9;
     $mode = ($mode - ($type << 9));
@@ -261,6 +271,7 @@ sub my_mkdir {
 sub my_open {
     my $file = RiakFuse::Filepath->new(shift());
     print "> open $file->{orig}\n" if($params{trace} > 3);
+    RiakFuse::Stats->increment("open");
 
     return RiakFuse::Stats->stats_open($file) if ($file->orig =~/^\/.riakfs/);
 
@@ -275,6 +286,7 @@ sub my_open {
 
 sub my_truncate {
     print "> truncate\n" if($params{trace} > 3);
+    RiakFuse::Stats->increment("truncate");
     my $file = RiakFuse::Filepath->new(shift());
     my $obj  = RiakFuse::Data->get($file);
     RiakFuse::Data->put($file, $obj->{'content-type'}, "");
@@ -284,6 +296,7 @@ sub my_truncate {
 sub my_read {
     print "> read\n" if($params{trace} > 3);
     my $file = RiakFuse::Filepath->new(shift());
+    RiakFuse::Stats->increment("read");
     my $request_size = shift;
     my $offset = shift;
     return RiakFuse::Stats->stats_read($file, $request_size, $offset) if ($file->orig =~/^\/.riakfs/);
@@ -298,6 +311,7 @@ sub my_read {
 sub my_write {
     my $file = RiakFuse::Filepath->new(shift());
     print "> write ($file->{orig})\n" if($params{trace} > 3);
+    RiakFuse::Stats->increment("write");
     my $buffer = shift;
     my $offset = shift;
     my $len = length($buffer);
@@ -312,6 +326,7 @@ sub my_write {
 sub my_mknod {
     my $file = RiakFuse::Filepath->new(shift());
     print "> mknod ($file->{orig})\n" if($params{trace} > 3);
+    RiakFuse::Stats->increment("mknod");
     my $mode = shift;
     my $dev = shift;
     my $type = $mode >> 9;
@@ -342,7 +357,7 @@ sub my_mknod {
 sub my_getdir {
     print "> getdir\n" if($params{trace} > 3);
     my $file = RiakFuse::Filepath->new(shift());
-    
+    RiakFuse::Stats->increment("getdir");
     if($file->orig =~/^\/.riakfs/) {
 	return (RiakFuse::Stats->getdir($file), 0);
     }
@@ -360,6 +375,7 @@ sub my_getdir {
 
 sub my_statfs {
     print "> statfs\n" if($params{trace} > 6);
+    RiakFuse::Stats->increment("statfs");
     return 255, 1, 1, 256*1024, 256*1024, 2;
 }
 
@@ -367,7 +383,7 @@ sub my_statfs {
 sub my_getattr {
     my $file = RiakFuse::Filepath->new(shift());
     print "> getattr " . $file->orig . " (" . $file->key . ")\n"  if($params{trace} > 10);
-
+    RiakFuse::Stats->increment("getattr");
     if ($file->orig =~/^\/.riakfs/) {
 	return RiakFuse::Stats->getattr($file);
     }
