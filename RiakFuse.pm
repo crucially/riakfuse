@@ -25,6 +25,7 @@ our @servers : shared;
 
 sub conf {
     my %opts = @_;
+    $params{mountopt}   = $opts{mountopt} || "";
     $params{mountpoint} = $opts{mountpoint} || die;
     $params{debug} =      $opts{debug} || 0;
     $params{threaded} =   1,
@@ -47,9 +48,14 @@ sub conf {
 	}
     }
 
+
+    #mountopts => "nolocalcaches" is needed to get sane behaviour on OSX
+    #sadly Fuse.pm thinks it is invalid
+    #also makes everything every very slow
+
     $fuse = Fuse::main(
 	mountpoint => $params{mountpoint},
-	mountopts => "nolocalcaches",
+	mountopts => $params{mountopt},
 	debug      => $params{debug},
 	threaded   => $params{threaded},
 	getattr => 'RiakFuse::my_getattr',
@@ -179,7 +185,7 @@ sub my_flush {
 sub my_rename {
     my $old = RiakFuse::Filepath->new(shift());
     my $new = RiakFuse::Filepath->new(shift());
-    
+    print "> rname ( ".$old->orig ." -> ". $new->orig ." )\n" if($params{trace} > 3);
     RiakFuse::Stats->increment("rename");
     my $old_parent = RiakFuse::Data->get($old->parent);
     

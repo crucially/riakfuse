@@ -16,12 +16,15 @@ my $clean = 0;
 my $mountpoint;
 my $trace = 0;
 my $debug = 0;
+my $mountopt;
+
 GetOptions("clean"     => \$clean,
 	   "server=s"  => \@servers,
 	   "fsname=s"  => \$fsname,
 	   "mount=s"   => \$mountpoint,
 	   "trace=i"   => \$trace,  
-	   "debug=i"   => \$debug,  
+	   "debug=i"   => \$debug,
+	   "mountopt=s" => \$mountopt,
     );
 
 die "Please tell me what server I should be using (--server=127.0.0.1:8091)\n" unless @servers;
@@ -30,6 +33,7 @@ die "Please tell me where to mount it (--mount=/tmp/myfs) (where to mount)\n" un
 
 RiakFuse::conf(
     mountpoint => "$mountpoint",
+    mountopt => $mountopt,
     trace => $trace,
     debug => $debug,
     threaded => 1,
