@@ -405,7 +405,6 @@ sub my_getattr {
 	return RiakFuse::Stats->getattr($file);
     }
 
-    #XXX use head here
     my $node;
 
     my $stat;
