@@ -28,23 +28,31 @@ sub conf {
     $params{mountopt}   = $opts{mountopt} || "";
     $params{mountpoint} = $opts{mountpoint} || die;
     $params{debug} =      $opts{debug} || 0;
-    $params{threaded} =   1,
+    $params{threaded} =   0,
     $params{trace}    =   $opts{trace}    || 0;
     $params{bufferdir}  = $opts{bufferdir} || die;
     $params{filebucket} = $opts{filebucket} || die;
     $params{logbucket}  = $opts{logbucket} || die;
     $params{servers}    = $opts{servers} || die;
 
-    threads->new(
-	sub {
-	    RiakFuse::Stats->start(\%params);
-	})->detach;
 
-    {
-	while (keys %servers == 0) {
-	    print STDERR "Trying to connect to servers ( ". join(' ,', @{$params{servers}}) . " )\n";
-	    lock(%servers);
-	    cond_wait(%servers) if(keys %servers == 0);
+    if($params{threaded}) {
+	threads->new(
+	    sub {
+		RiakFuse::Stats->start(\%params);
+	    })->detach;
+	
+	{
+	    while (keys %servers == 0) {
+		print STDERR "Trying to connect to servers ( ". join(' ,', @{$params{servers}}) . " )\n";
+		lock(%servers);
+		cond_wait(%servers) if(keys %servers == 0);
+	    }
+	}
+    } else {
+	RiakFuse::HTTP->CLONE();
+	foreach my $server (@{$params{servers}}) {
+	    $servers{$server} = 1;
 	}
     }
 
@@ -257,16 +265,19 @@ sub my_mkdir {
 			    '..' => {},
 			});
 
-    $parent->{content}->{$file->name} = {
-			    atime => time,
-			    ctime => time,
-			    filename => $file->orig,
-			    mode => $mode,
-			    type => $type,
-			    uid  => fuse_get_context()->{"uid"},
-			    gid  => fuse_get_context()->{"gid"},
-    };
+    my %tmp;
+    share(%tmp);
 
+    %tmp = (
+	atime => time,
+	ctime => time,
+	filename => $file->orig,
+	mode => $mode,
+	type => $type,
+	uid  => fuse_get_context()->{"uid"},
+	gid  => fuse_get_context()->{"gid"},
+    );
+    $parent->{content}->{$file->name} =\%tmp;
 
     RiakFuse::Data->put($file->parent, "application/json", $parent->{content});
 
@@ -291,9 +302,9 @@ sub my_open {
 }
 
 sub my_truncate {
-    print "> truncate\n" if($params{trace} > 3);
     RiakFuse::Stats->increment("truncate");
     my $file = RiakFuse::Filepath->new(shift());
+    print "> truncate " . $file->orig ."\n" if($params{trace} > 3);
     my $obj  = RiakFuse::Data->get($file);
     RiakFuse::Data->put($file, $obj->{'content-type'}, "");
     return 0;
@@ -368,7 +379,7 @@ sub my_getdir {
 	return (RiakFuse::Stats->getdir($file), 0);
     }
 
-    my $obj = RiakFuse::Data->get($file);
+    my $obj = RiakFuse::Data->get($file,0);
     my @rv = map { uri_unescape($_) } keys %{$obj->{content}};
 
     #magic subdir full of stats
@@ -395,14 +406,19 @@ sub my_getattr {
     }
 
     #XXX use head here
-    my $node = RiakFuse::Data->get($file);
-    return $node unless ref $node;
+    my $node;
+
     my $stat;
     if($file->key eq '%2F') {
+	$node = RiakFuse::Data->get($file,1);
+	return $node unless ref $node;
 	#we are root so our metadata is self contained
 	$stat = $node->{content}->{'.'};
     } else {
-	my $parent = RiakFuse::Data->get($file->parent);
+	$node = RiakFuse::Data->head($file,1);
+	return $node unless ref $node;
+	my $parent = RiakFuse::Data->get($file->parent,1);
+#	die unless ref $parent;
 	$stat = $parent->{content}->{$file->name};
     }
 
@@ -410,7 +426,7 @@ sub my_getattr {
 	0,
 	0,
 	$stat->{mode} + ($stat->{type} <<9),
-	2,
+	1,
 	$stat->{uid},
 	$stat->{gid},
 	0, #rdev

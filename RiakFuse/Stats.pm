@@ -65,17 +65,17 @@ sub start {
 		$RiakFuse::servers{$server} = 0;
 	    }
 	}
-	threads->new(sub {
-	    RiakFuse::HTTP->timeout(1);
-	    while(1) {
-		sleep 1;
-		my $resp = RiakFuse::HTTP->raw("GET","http://$server/stats");
-		if($resp->is_success) {
-		    $RiakFuse::servers{$server} = 1;
-		} else {
-		    $RiakFuse::servers{$server} = 0;
-		}
-	    }})->detach;
+#	threads->new(sub {
+#	    RiakFuse::HTTP->timeout(1);
+#	    while(1) {
+#		sleep 1;
+#		my $resp = RiakFuse::HTTP->raw("GET","http://$server/stats");
+#		if($resp->is_success) {
+#		    $RiakFuse::servers{$server} = 1;
+#		} else {
+#		    $RiakFuse::servers{$server} = 0;
+#		}
+#	    }})->detach;
     }
     cond_signal(%RiakFuse::servers);
 
