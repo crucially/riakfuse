@@ -20,7 +20,6 @@ TODO
 
 * chown
 * chmod
-* HEAD requests when needed
 * If-Match for edits and restart them if they fail
 * Proper vector clock support
 
