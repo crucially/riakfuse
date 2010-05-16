@@ -16,7 +16,7 @@ use Carp;
 our $id = hostname();
 
 sub CLONE {
-    $ua = LWP::UserAgent->new();
+    $ua = LWP::UserAgent->new(keep_alive => 1);
 }
 
 sub timeout {
