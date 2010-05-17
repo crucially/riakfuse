@@ -1,0 +1,136 @@
+#!/usr/bin/perl
+
+use RiakFuse;
+use RiakFuse::Data;
+use RiakFuse::HTTP;
+use RiakFuse::Filepath;
+use Getopt::Long;
+use strict;
+my $fsname;
+my $server;
+my $src;
+my $dst;
+my $clean = 0;
+
+GetOptions("clean"     => \$clean,
+	   "server=s"  => \$server,
+	   "fsname=s"  => \$fsname,
+	   "src=s" => \$src,
+	   "dst=s"  => \$dst,
+    );
+die "Please tell me what server I should be using (--server=127.0.0.1:8091)\n" unless $server;
+die "Please tell me the name of the filesystem (--fsname=mytestfs) (maps to a bucket)\n" unless $fsname;
+die unless $src;
+die unless $dst;
+
+RiakFuse::HTTP->CLONE();
+
+$RiakFuse::servers{$server} = 1;
+$RiakFuse::params{filebucket} = $fsname;
+$RiakFuse::params{trace} = 0;
+
+my $depth = 0;
+my @target_path = split "/", $dst;
+my $orig_dir = join "/", @target_path;
+sub import_dir {
+    my $dir = shift;
+    push @target_path, $dir if($dir ne '.');
+    $depth++;
+    print ">" x $depth;
+    print "import directory $dir into @{[join('/',@target_path)]}\n";
+    opendir(my $dh, $dir) || die;
+    chdir($dir);
+    my @files;
+    my @dirs;
+    for(readdir($dh)) {
+	next if($_ eq '.');
+	next if($_ eq '..');
+	if(-d $_) {
+	    push @dirs, $_;
+	} else {
+	    push @files, $_;
+	}
+    }
+    closedir($dh);
+    make_dir(join("/", @target_path), \@files, \@dirs);
+    print ((">" x ($depth + 1)) . "import file $_\n") for @files;
+    import_dir($_) for @dirs;
+    chdir("..");
+    print "<" x $depth;
+    print "\n";
+    $depth--;
+    pop @target_path;
+}
+
+sub make_dir {
+    my $target = shift;
+    my $files = shift;
+    my $dirs = shift;
+    my $file = RiakFuse::Filepath->new($target);
+    my $cwd = RiakFuse::Data->get($file);
+    
+    my $content = (ref($cwd) && $cwd->{content}) || {
+	'.' => {},
+	'..' => {},
+    };
+    foreach my $dir (map { RiakFuse::Filepath->new($target."/$_")} @$dirs) {
+	
+	next if (exists($content->{$dir->name}));
+	$content->{$dir->name} = {
+	    atime => time,
+	    ctime => time,
+	    filename => $file->orig,
+	    mode => 0755,
+	    type => 0040,
+	    uid => $<,
+	    gid => int($(),
+	};
+	RiakFuse::Data->put($dir,
+			    'application/json',
+			    {
+				'.' => {},
+				'..' => {},
+			    },
+	    );
+    }
+    foreach my $f (map { RiakFuse::Filepath->new($target . "/$_")} @$files) {
+	$content->{$f->name} = {
+	    atime => time,
+	    ctime => time,
+	    filename => $f->orig,
+	    mode => 0755,
+	    type => 64,
+	    uid => $<,
+	    gid => int($(),
+	};
+	local($/);
+	open(my $fh, $f->name) || die $f->name;
+	RiakFuse::Data->put($f,
+			    'application/octect-stream',
+			    <$fh>);
+	close($fh);
+    }
+    RiakFuse::Data->put($file, 'application/json', $content);
+
+}
+
+
+
+chdir($src);
+import_dir(".");
+
+my $file = RiakFuse::Filepath->new($orig_dir);
+my $parent = RiakFuse::Data->get($file->parent);
+
+$parent->{content}->{$file->name} =
+{
+    atime => time,
+    ctime => time,
+    filename => $file->orig,
+    mode => 0755,
+    type => 0040,
+    uid => $<,
+    gid => int($(),
+};
+
+RiakFuse::Data->put($file->parent, "application/json", $parent->{content});
