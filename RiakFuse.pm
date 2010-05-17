@@ -56,36 +56,45 @@ sub conf {
 	}
     }
 
-
     #mountopts => "nolocalcaches" is needed to get sane behaviour on OSX
     #sadly Fuse.pm thinks it is invalid
     #also makes everything every very slow
 
-    $fuse = Fuse::main(
-	mountpoint => $params{mountpoint},
-	mountopts => $params{mountopt},
-	debug      => $params{debug},
-	threaded   => $params{threaded},
-	getattr => 'RiakFuse::my_getattr',
-	statfs  => 'RiakFuse::my_statfs',
-	getdir =>"RiakFuse::my_getdir",
-	mknod  => "RiakFuse::my_mknod",
-	utime => "RiakFuse::my_utime",
-	write  => "RiakFuse::my_write",
-	read   => "RiakFuse::my_read",
-	truncate => "RiakFuse::my_truncate",
-	open   =>"RiakFuse::my_open",
-	mkdir => "RiakFuse::my_mkdir",
-	unlink => "RiakFuse::my_unlink",
-	rmdir => "RiakFuse::my_rmdir",
-	rename => "RiakFuse::my_rename",
-	chmod => "RiakFuse::my_chmod",
-	chown => "RiakFuse::my_chown",
-	flush => "RiakFuse::my_release",
-	release => "RiakFuse::my_flush",
-	setxattr => "RiakFuse::my_setxattr",
-	getxattr => "RiakFuse::my_getxattr",
-	);
+    threads->new(sub {
+	$fuse = Fuse::main(
+	    mountpoint => $params{mountpoint},
+	    mountopts => $params{mountopt},
+	    debug      => $params{debug},
+	    threaded   => $params{threaded},
+	    getattr => 'RiakFuse::my_getattr',
+	    statfs  => 'RiakFuse::my_statfs',
+	    getdir =>"RiakFuse::my_getdir",
+	    mknod  => "RiakFuse::my_mknod",
+	    utime => "RiakFuse::my_utime",
+	    write  => "RiakFuse::my_write",
+	    read   => "RiakFuse::my_read",
+	    truncate => "RiakFuse::my_truncate",
+	    open   =>"RiakFuse::my_open",
+	    mkdir => "RiakFuse::my_mkdir",
+	    unlink => "RiakFuse::my_unlink",
+	    rmdir => "RiakFuse::my_rmdir",
+	    rename => "RiakFuse::my_rename",
+	    chmod => "RiakFuse::my_chmod",
+	    chown => "RiakFuse::my_chown",
+	    flush => "RiakFuse::my_release",
+	    release => "RiakFuse::my_flush",
+	    setxattr => "RiakFuse::my_setxattr",
+	    getxattr => "RiakFuse::my_getxattr",
+	    );
+		 })->join;
+    
+}
+
+my $time = time();
+
+sub house_cleaning {
+  my $self = shift;
+  
 }
 
 sub CLONE {
@@ -304,9 +313,12 @@ sub my_open {
 sub my_truncate {
     RiakFuse::Stats->increment("truncate");
     my $file = RiakFuse::Filepath->new(shift());
-    print "> truncate " . $file->orig ."\n" if($params{trace} > 3);
+    my $offset = shift;
+    print "> truncate " . $file->orig ." at $offset\n" if($params{trace} > 3);
     my $obj  = RiakFuse::Data->get($file);
-    RiakFuse::Data->put($file, $obj->{'content-type'}, "");
+    my $len = length($obj->{content});
+    substr($obj->{content}, $offset, $len - $offset, "");
+    RiakFuse::Data->put($file, $obj->{'content-type'}, $obj->{content});
     return 0;
 }
 
@@ -320,7 +332,7 @@ sub my_read {
 
     my $content = RiakFuse::Data->get($file)->{content};
     print "> read $request_size att offset $offset from file " . $file->key . "\n"  if($params{trace} > 3);
-    
+
     return substr($content, $offset, $request_size);
 }
 
