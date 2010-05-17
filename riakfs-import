@@ -11,7 +11,7 @@ my $server;
 my $src;
 my $dst;
 my $clean = 0;
-
+use File::stat;
 GetOptions("clean"     => \$clean,
 	   "server=s"  => \$server,
 	   "fsname=s"  => \$fsname,
@@ -76,14 +76,18 @@ sub make_dir {
     foreach my $dir (map { RiakFuse::Filepath->new($target."/$_")} @$dirs) {
 	
 	next if (exists($content->{$dir->name}));
+	my $st = stat ($dir->name);
+	my $type = $st->mode >> 0;
+	my $mode = ($st->mode - ($type << 9));
+
 	$content->{$dir->name} = {
 	    atime => time,
 	    ctime => time,
 	    filename => $file->orig,
-	    mode => 0755,
-	    type => 0040,
-	    uid => $<,
-	    gid => int($(),
+	    mode => $mode,
+	    type => $type,
+	    uid => $st->uid,
+	    gid => $st->gid,,
 	};
 	RiakFuse::Data->put($dir,
 			    'application/json',
@@ -94,16 +98,20 @@ sub make_dir {
 	    );
     }
     foreach my $f (map { RiakFuse::Filepath->new($target . "/$_")} @$files) {
+	my $st = stat($f->name);
+	my $type = $st->mode >> 0;
+	my $mode = ($st->mode - ($type << 9));
 	$content->{$f->name} = {
-	    atime => time,
-	    ctime => time,
+	    atime => $st->atime,
+	    ctime => $st->mtime,
 	    filename => $f->orig,
-	    mode => 0755,
-	    type => 64,
-	    uid => $<,
-	    gid => int($(),
+	    mode => $mode,
+	    type => $type,
+	    uid => $st->uid,
+	    gid => $st->gid,,
 	};
 	local($/);
+	
 	open(my $fh, $f->name) || die $f->name;
 	RiakFuse::Data->put($f,
 			    'application/octect-stream',
