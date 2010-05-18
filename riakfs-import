@@ -114,7 +114,7 @@ sub make_dir {
 	my $mode = ($st->mode - ($type << 9));
 	$content->{$f->name} = {
 	    atime => $st->atime,
-	    ctime => $st->mtime,
+	    ctime => $st->ctime,
 	    filename => $f->orig,
 	    mode => $mode,
 	    type => $type,
@@ -148,7 +148,7 @@ sub make_dir {
 	    print "creating $file->{name} ($tpath)\n";
 	    $parent->{content}->{$file->name} = {
 		atime => time,
-		mtime => time,
+		ctime => time,
 		uid => $<,
 		gid => int($(),
 		type => 0040,
