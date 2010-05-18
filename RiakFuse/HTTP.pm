@@ -48,6 +48,7 @@ sub put {
     $req->header("Content-Type", $obj->{'content-type'});
     $req->header("X-Riak-Vclock", $obj->{'x-riak-vclock'}) if($obj->{'x-riak-vclock'});
     $req->header("X-Riak-Client-Id", $id);
+    $req->header("If-Match", $obj->{'if-match'}) if($obj->{'if-match'});
     foreach my $key (keys %$obj) {
 	next unless $key =~/^x-riak-meta-/i;
 	$req->header($key, $obj->{$key});
@@ -56,6 +57,9 @@ sub put {
     my $resp = $ua->request($req);
     if($resp->is_success) {
 	return 0;
+    } elsif ($resp->code == 412) {
+	# precondtion failed
+	return 1;
     } elsif ($resp->code == 404) {
 	return -ENOENT();
     } else {
