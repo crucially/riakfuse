@@ -88,6 +88,7 @@ sub fetch {
 	    'content-length' => $resp->header("Content-Length"),
 	    'content-type'   => $resp->header("Content-Type"),
 	    'etag'           => $resp->header('ETag'),
+	    'x-riak-vclock'  => $resp->header('X-Riak-Vclock'),
 	};
 	$rv->{'last-modified'} = str2time($resp->header('X-Riak-Meta-Last-Modified'))
 	    if ($resp->header('X-Riak-Meta-Last-Modified'));
