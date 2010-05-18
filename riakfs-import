@@ -11,12 +11,14 @@ my $server;
 my $src;
 my $dst;
 my $clean = 0;
+my $exclude = "";
 use File::stat;
 GetOptions("clean"     => \$clean,
 	   "server=s"  => \$server,
 	   "fsname=s"  => \$fsname,
 	   "src=s" => \$src,
 	   "dst=s"  => \$dst,
+	   "exclude=s" => \$exclude,
     );
 die "Please tell me what server I should be using (--server=127.0.0.1:8091)\n" unless $server;
 die "Please tell me the name of the filesystem (--fsname=mytestfs) (maps to a bucket)\n" unless $fsname;
@@ -43,6 +45,11 @@ sub import_dir {
     my @files;
     my @dirs;
     for(readdir($dh)) {
+	if($_ eq $exclude) {
+	    print "Excluding $_ == $exclude\n";
+	    next;
+	}
+	next if(-l $_);
 	next if($_ eq '.');
 	next if($_ eq '..');
 	if(-d $_) {
@@ -121,12 +128,35 @@ sub make_dir {
     RiakFuse::Data->put($file, 'application/json', $content);
 
 }
+{
 
-
+    my $tpath = "";
+    foreach my $path (split "/", $orig_dir) {
+	$tpath .= "/" if $tpath ne '/';
+	$tpath .= "$path" ;
+	my $file = RiakFuse::Filepath->new($tpath);
+	if($tpath ne '/') {
+	    my $parent = RiakFuse::Data->get($file->parent);
+	    next if exists $parent->{content}->{$file->name};
+	    print "creating $file->{name} ($tpath)\n";
+	    $parent->{content}->{$file->name} = {
+		atime => time,
+		mtime => time,
+		uid => $<,
+		gid => int($(),
+		type => 0040,
+		mode => 0755,
+		key => $file->key,
+	    };
+	    RiakFuse::Data->put($file->parent, "application/json",$parent->{content});
+	    RiakFuse::Data->put($file, "application/json",{ '.' => {}, '..' => {}});
+	}
+    }
+}
 
 chdir($src);
 import_dir(".");
-
+exit;
 my $file = RiakFuse::Filepath->new($orig_dir);
 my $parent = RiakFuse::Data->get($file->parent);
 
