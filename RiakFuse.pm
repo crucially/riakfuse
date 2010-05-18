@@ -374,28 +374,39 @@ sub my_mknod {
     my $type = $mode >> 9;
     $mode = ($mode - ($type << 9));
 
-    my $node = RiakFuse::Data->get($file->parent);
-    return $node unless ref $node;
-    
-    return -EEXIST() if (exists($node->{content}->{$file->name}));
+    for (1..5) {
+	my $node = RiakFuse::Data->get($file->parent);
+	return $node unless ref $node;
 
-    $node->{content}->{$file->name} = {
-	atime => time,
-	ctime => time,
-	filename => $file->name,
-	mode => $mode,
-	type => $type,
-	uid  => fuse_get_context()->{"uid"},
-	gid  => fuse_get_context()->{"gid"},
-    };
+	return -EEXIST() if (exists($node->{content}->{$file->name}));
 
-    RiakFuse::Data->put($file->parent, $node);
+	$node->{content}->{$file->name} = {
+	    atime => time,
+	    ctime => time,
+	    filename => $file->name,
+	    mode => $mode,
+	    type => $type,
+	    uid  => fuse_get_context()->{"uid"},
+	    gid  => fuse_get_context()->{"gid"},
+	};
+	$node->{'if-match'} = $node->{'etag'};
 
-    RiakFuse::Data->put($file, {
-	'content-type' => 'application/octect-stream',
-	'content' => ''});
+	my $rv = RiakFuse::Data->put($file, {
+	    'content-type' => 'application/octect-stream',
+	    'content' => '',
+	    'if-match' => '',
+				     });
 
-    return 0;
+	return $rv if $rv < 0; #erro
+	$rv = RiakFuse::Data->put($file->parent, $node);
+	next if ($rv == 1); #retry
+	return $rv if $rv < 0; #erro
+	die if($rv != 0);
+	return 0;
+
+
+    }
+    return -EIO;
 }
 
 sub my_getdir {
