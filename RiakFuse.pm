@@ -127,13 +127,18 @@ sub my_setxattr {
     
     print "> setxattr (".$file->orig.") -> ($xattr_key = $xattr_value => $flags)\n" if($params{trace} > 1);
 
-
-    my $parent = RiakFuse::Data->get($file->parent);
-    return -ENOENT() unless ref $parent;
-    return -ENOENT() unless exists $parent->{content}->{$file->name};
-    $parent->{content}->{$file->name}->{xattr}->{$xattr_key} = $xattr_value;
-    RiakFuse::Data->put($file->parent, $parent);
-    return 0;
+    for(1..5) {
+	my $parent = RiakFuse::Data->get($file->parent);
+	return -ENOENT() unless ref $parent;
+	return -ENOENT() unless exists $parent->{content}->{$file->name};
+	$parent->{content}->{$file->name}->{xattr}->{$xattr_key} = $xattr_value;
+	$parent->{'if-match'} = $parent->{'etag'};
+	my $rv = RiakFuse::Data->put($file->parent, $parent);
+	next if($rv == 1); # retry
+	return $v if $rv < 0;
+	return 0;
+    }
+    return -EIO();
 }
 
 sub my_getxattr {
