@@ -5,6 +5,7 @@ use RiakFuse::Data;
 use RiakFuse::HTTP;
 use RiakFuse::Filepath;
 use Getopt::Long;
+use HTTP::Date;
 use strict;
 my $fsname;
 my $server;
@@ -75,7 +76,7 @@ sub make_dir {
     my $dirs = shift;
     my $file = RiakFuse::Filepath->new($target);
     my $cwd = RiakFuse::Data->get($file);
-    
+   
     my $content = (ref($cwd) && $cwd->{content}) || {
 	'.' => {},
 	'..' => {},
@@ -97,10 +98,13 @@ sub make_dir {
 	    gid => $st->gid,,
 	};
 	RiakFuse::Data->put($dir,
-			    'application/json',
-			    {
-				'.' => {},
-				'..' => {},
+			    { 
+				'content' => {
+				    '.' => {},
+				    '..' => {},
+				},
+				'content-type' => 'application/json',
+				'X-Riak-Meta-Last-Modified' => time2str($st->mtime),
 			    },
 	    );
     }
@@ -121,11 +125,14 @@ sub make_dir {
 	
 	open(my $fh, $f->name) || die $f->name;
 	RiakFuse::Data->put($f,
-			    'application/octect-stream',
-			    <$fh>);
+			    {
+				'content-type' => 'application/octect-stream',
+				'X-Riak-Meta-Last-Modified' => time2str($st->mtime),
+				'content' => <$fh>,
+			    });
 	close($fh);
     }
-    RiakFuse::Data->put($file, 'application/json', $content);
+    RiakFuse::Data->put($file, { 'content-type' => 'application/json', content => $content });
 
 }
 {
@@ -148,8 +155,8 @@ sub make_dir {
 		mode => 0755,
 		key => $file->key,
 	    };
-	    RiakFuse::Data->put($file->parent, "application/json",$parent->{content});
-	    RiakFuse::Data->put($file, "application/json",{ '.' => {}, '..' => {}});
+	    RiakFuse::Data->put($file->parent, $parent);
+	    RiakFuse::Data->put($file, { 'content-type' => "application/json", 'content' => { '.' => {}, '..' => {}}});
 	}
     }
 }
