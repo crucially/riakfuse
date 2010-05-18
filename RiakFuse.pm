@@ -303,7 +303,7 @@ sub my_mkdir {
 	}
     }
 
-    return 0;
+    return -EIO();
 }
 
 
