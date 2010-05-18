@@ -11,7 +11,7 @@ use RiakFuse::Data;
 use Data::Dumper;
 use HTTP::Date;
 our %params;
-use POSIX qw(ENOTEMPTY ENOENT EEXIST EACCES);
+use POSIX qw(ENOTEMPTY ENOENT EEXIST EACCES ENOTDIR);
 my $fuse;
 use RiakFuse::Stats;
 
@@ -248,10 +248,29 @@ sub my_unlink {
     my $file = RiakFuse::Filepath->new(shift());
     print "> unlink ($file->{orig})\n" if($params{trace} > 3);
     RiakFuse::Stats->increment("unlink");
-    my $dir = RiakFuse::Data->get($file->parent);
-    delete($dir->{content}->{$file->name});
-    RiakFuse::Data->put($file->parent, $dir);
-    RiakFuse::Data->delete($file);
+    for (1..5) {
+	my $dir = RiakFuse::Data->get($file->parent);
+
+	# if the directory doesn't exist or doesn't load
+	return -ENOTDIR() if($dir == -ENOENT());
+	return $dir unless ref($dir);
+
+	# if the file doesn't exist in the parent
+	return -ENOENT() unless $dir->{content}->{$file->name};
+
+	# delete the file, abort on error unless we have already tried to delete it
+	# worse case is that a directory has a empty file pointer
+	my $rv = RiakFuse::Data->delete($file);
+	return $rv if($rv < 0 && $_ == 1);
+
+	delete($dir->{content}->{$file->name});
+	$dir->{'if-match'} = $dir->{'etag'};
+	$rv = RiakFuse::Data->put($file->parent, $dir);
+	next if($rv == 1); #retry
+	return $rv if($rv < 0); #error
+	return 0;
+    }
+    return -EIO();
 }
 
 sub my_mkdir {
