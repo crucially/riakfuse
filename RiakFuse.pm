@@ -135,7 +135,7 @@ sub my_setxattr {
 	$parent->{'if-match'} = $parent->{'etag'};
 	my $rv = RiakFuse::Data->put($file->parent, $parent);
 	next if($rv == 1); # retry
-	return $v if $rv < 0;
+	return $rv if $rv < 0;
 	return 0;
     }
     return -EIO();
