@@ -208,6 +208,8 @@ sub my_flush {
 }
 
 
+
+# XXXX this doesn't guard for conflicts
 sub my_rename {
     my $old = RiakFuse::Filepath->new(shift());
     my $new = RiakFuse::Filepath->new(shift());
