@@ -29,6 +29,7 @@ sub raw {
     my $method = shift;
     my $url = shift;
     RiakFuse::Stats->increment("http_raw_$method");
+    print ">> RAW $method $url\n" if($RiakFuse::params{trace} > 15);;
     my $req = HTTP::Request->new($method, $url);
     return $ua->request($req);
 }
@@ -55,7 +56,8 @@ sub put {
 	$obj->{content} = to_json($obj->{content});
     }
     RiakFuse::Stats->increment("http_put");
-    my $server = RiakFuse->get_server;
+    my ($server, $error) = RiakFuse->get_server;
+    return $error if $error;
     print ">> PUT 'http://$server/riak/$RiakFuse::params{filebucket}/$key'\n" if($RiakFuse::params{trace} > 15);
     my $req = HTTP::Request->new("PUT", "http://$server/riak/$RiakFuse::params{filebucket}/$key");
     setup_headers($req, $obj);
@@ -79,8 +81,9 @@ sub fetch {
     my $key    = shift;
     my $cond   = shift;
     my $method = shift;
-    my $server = RiakFuse->get_server;
-   print ">> Fetching $method 'http://$server/riak/$RiakFuse::params{filebucket}/$key'\n" if($RiakFuse::params{trace} > 15);
+    my ($server, $error) = RiakFuse->get_server;
+    return $error if $error;
+    print ">> Fetching $method 'http://$server/riak/$RiakFuse::params{filebucket}/$key'\n" if($RiakFuse::params{trace} > 15);
 
     RiakFuse::Stats->increment("http_fetch_$method");
     my $req = HTTP::Request->new($method, "http://$server/riak/$RiakFuse::params{filebucket}/$key");
@@ -148,7 +151,8 @@ sub delete {
     my $class = shift;
     my $key = shift;
     my $obj = shift;
-    my $server = RiakFuse->get_server;
+    my ($server, $error) = RiakFuse->get_server;
+    return $error if $error;
     print ">> DELETE http://$server/riak/$RiakFuse::params{filebucket}/$key\n" if($RiakFuse::params{trace} > 15);
     RiakFuse::Stats->increment("http_delete");
     my $req = HTTP::Request->new("DELETE", "http://$server/riak/$RiakFuse::params{filebucket}/$key");
