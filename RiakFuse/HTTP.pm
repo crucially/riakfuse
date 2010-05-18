@@ -83,32 +83,28 @@ sub fetch {
     if ($cond && $resp->code == 304) {
 	return 0;
     } elsif ($resp->is_success) {
+	my $rv = {
+	    'last-modified' => str2time($resp->header("Last-Modified")),
+	    'content-length' => $resp->header("Content-Length"),
+	    'content-type'   => $resp->header("Content-Type"),
+	    'etag'           => $resp->header('ETag'),
+	};
+	$rv->{'last-modified'} = str2time($resp->header('X-Riak-Meta-Last-Modified'))
+	    if ($resp->header('X-Riak-Meta-Last-Modified'));
+
+
+					  
 	if ($method eq 'GET') {
 	    if ($resp->header("Content-Type") eq 'application/json') {
 		my $json = from_json($resp->content);
-		return ({
-		    'last-modified' => str2time($resp->header("Last-Modified")),
-		    'content-length' => $resp->header("Content-Length"),
-		    'content-type'   => $resp->header("Content-Type"),
-		    'etag'           => $resp->header('ETag'),
-		    content => $json
-			});
+		$rv->{content} = $json;
+		return $rv;
 	    } else {
-		return {
-		    "last-modified" => str2time($resp->header("Last-Modified")),
-		    "content-length" => $resp->header("Content-Length"),
-		    'content-type'   => $resp->header("Content-Type"),
-		    'etag'           => $resp->header('ETag'),
-		    "content" => $resp->content,
-		}
+		$rv->{content} = $resp->content;
+		return $rv;
 	    }
 	} else {
-	    return {
-		"last-modified"  => str2time($resp->header("Last-Modified")),
-		"content-length" => $resp->header("Content-Length"),
-		'content-type'   => $resp->header("Content-Type"),
-		'etag'           => $resp->header('ETag',)
-	    };
+	    return $rv;
 	}
 
     
