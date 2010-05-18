@@ -1,0 +1,75 @@
+
+backend riak1 { 
+  .host = "127.0.0.1";
+  .port = "8091";
+  .probe = {
+    .request = "HEAD /stats HTTP/1.1" "Connection: close";
+    .timeout = 5s;
+    .window = 5;
+    .threshold = 3;
+  }
+}
+
+
+backend riak2 { 
+  .host = "127.0.0.1";
+  .port = "8091";
+  .probe = {
+    .request = "HEAD /stats HTTP/1.1" "Connection: close";
+    .timeout = 5s;
+    .window = 5;
+    .threshold = 3;
+  }
+}
+
+
+backend riak3 { 
+  .host = "127.0.0.1";
+  .port = "8091";
+  .probe = {
+    .request = "HEAD /stats HTTP/1.1" "Connection: close";
+    .timeout = 5s;
+    .window = 5;
+    .threshold = 3;
+  }
+}
+
+director riak random {
+  {
+    .backend = riak1;
+    .weight = 100;
+  }
+  {
+    .backend = riak2;
+    .weight = 100;
+  }
+  {
+    .backend = riak3;
+    .weight = 100;
+  }
+}
+
+
+sub vcl_recv {
+  set req.url = regsuball(req.url, "/", {"%2F"});
+  set req.url = regsuball(req.url, "\.",  {"%2E"});
+  set req.url = regsuball(req.url, "\_", {"%5F"});
+  set req.url = "/riak/bucket/" req.url;
+  set req.backend = riak;
+  return(lookup);
+}
+
+
+sub vcl_fetch {
+  if(req.url ~ "jpg$") {
+    set beresp.http.content-type = "image/jpeg";
+  } else if(req.url ~ "png$") {
+    set beresp.http.content-type = "image/png";
+  } else if(req.url ~ "gif$") {
+    set beresp.http.content-type = "image/gif";
+  }
+  if(beresp.http.X-Riak-Meta-Last-Modified) {
+    set beresp.http.Last-Modified = beresp.http.X-Riak-Meta-Last-Modified;
+  }
+  return(deliver);
+}
