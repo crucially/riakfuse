@@ -278,7 +278,7 @@ sub my_mkdir {
 					 'content-type' => 'application/json',
 					 'if-match' => ''
 				     });
-	print "rv is $rv\n";
+	# should do a repair here maybe XXX
 	return $rv if $rv < 0;
 	
 	$parent->{content}->{$file->name} = {
@@ -295,8 +295,8 @@ sub my_mkdir {
 	print "rv is $rv\n";
 	return $rv if $rv <= 0;
 	if ($rv == 1) {
-	    print "try again\n";
-	    # oops we failed we need to retry
+	    # we got a precondition failed
+	    # time to retry
 	    next;
 	} else {
 	    die "unknown rv value $rv\n";
