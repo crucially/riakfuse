@@ -373,7 +373,7 @@ sub my_mknod {
     my $dev = shift;
     my $type = $mode >> 9;
     $mode = ($mode - ($type << 9));
-    
+
     my $node = RiakFuse::Data->get($file->parent);
     return $node unless ref $node;
     
@@ -444,7 +444,7 @@ sub my_getattr {
 	$node = RiakFuse::Data->head($file,1);
 	return $node unless ref $node;
 	my $parent = RiakFuse::Data->get($file->parent,1);
-#	die unless ref $parent;
+	return $parent unless ref $parent;
 	$stat = $parent->{content}->{$file->name};
     }
 
