@@ -232,16 +232,37 @@ sub my_rmdir {
     my $file = RiakFuse::Filepath->new(shift());
     print "> rmdir ($file->{orig})\n" if($params{trace} > 3);
     RiakFuse::Stats->increment("rmdir");
-    my $obj = RiakFuse::Data->get($file);
-    if(ref($obj->{content}) && keys %{$obj->{content}} > 2) {
-	return -ENOTEMPTY();
-    }
 
-    my $dir = RiakFuse::Data->get($file->parent);
-    delete ($dir->{content}->{$file->name});
-    RiakFuse::Data->put($file->parent, $dir);
-    RiakFuse::Data->delete($file);
-    return 0;
+    for(1..5) {
+
+	my $dir = RiakFuse::Data->get($file->parent);
+	return -ENOTDIR() if $dir == -ENOENT();
+	return $dir unless ref $dir;
+	return -ENOENT() unless $dir->{content}->{$file->name};
+
+
+	#our first try only
+	if($_ == 1) {
+	    my $obj = RiakFuse::Data->get($file);
+	    return $obj unless ref $obj; #got an error back
+	    return -ENOTEMPTY() if(ref($obj->{content}) && keys %{$obj->{content}} > 2); #not empty
+	    return -ENOTDIR() unless ref $obj->{content}; #xxx will accept any application/json assumes those are the only dirs
+	}
+
+	my $rv = RiakFuse::Data->delete($file);
+	return $rv if($rv < 0 && $_ == 1);
+
+
+	delete ($dir->{content}->{$file->name});
+	$dir->{'if-match'} = $dir->{'etag'};
+	
+
+	$rv = RiakFuse::Data->put($file->parent, $dir);
+	next if $rv == 1; #retry
+	return $rv if $rv < 0;
+	return 0;
+    }
+    return -EIO();
 }
 
 sub my_unlink {
@@ -311,7 +332,7 @@ sub my_mkdir {
 	};
 	$parent->{'if-match'} = $parent->{'etag'};
 	$rv = RiakFuse::Data->put($file->parent, $parent);
-	print "rv is $rv\n";
+
 	return $rv if $rv <= 0;
 	if ($rv == 1) {
 	    # we got a precondition failed
