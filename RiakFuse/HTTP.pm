@@ -33,6 +33,19 @@ sub raw {
     return $ua->request($req);
 }
 
+sub setup_headers {
+    my $req = shift;
+    my $obj = shift;
+    $req->header("Content-Type", $obj->{'content-type'});
+    $req->header("X-Riak-Vclock", $obj->{'x-riak-vclock'}) if($obj->{'x-riak-vclock'});
+    $req->header("X-Riak-Client-Id", $id);
+    $req->header("If-Match", $obj->{'if-match'}) if($obj->{'if-match'});
+    foreach my $key (keys %$obj) {
+	next unless $key =~/^x-riak-meta-/i;
+	$req->header($key, $obj->{$key});
+    }    
+}
+
 sub put {
     my $class = shift;
     my $key = shift;
@@ -45,14 +58,8 @@ sub put {
     my $server = RiakFuse->get_server;
     print ">> PUT 'http://$server/riak/$RiakFuse::params{filebucket}/$key'\n" if($RiakFuse::params{trace} > 15);
     my $req = HTTP::Request->new("PUT", "http://$server/riak/$RiakFuse::params{filebucket}/$key");
-    $req->header("Content-Type", $obj->{'content-type'});
-    $req->header("X-Riak-Vclock", $obj->{'x-riak-vclock'}) if($obj->{'x-riak-vclock'});
-    $req->header("X-Riak-Client-Id", $id);
-    $req->header("If-Match", $obj->{'if-match'}) if($obj->{'if-match'});
-    foreach my $key (keys %$obj) {
-	next unless $key =~/^x-riak-meta-/i;
-	$req->header($key, $obj->{$key});
-    }
+    setup_headers($req, $obj);
+
     $req->content($obj->{content} || "");
     my $resp = $ua->request($req);
     if($resp->is_success) {
@@ -140,14 +147,18 @@ sub head {
 sub delete {
     my $class = shift;
     my $key = shift;
+    my $obj = shift;
     my $server = RiakFuse->get_server;
     print ">> DELETE http://$server/riak/$RiakFuse::params{filebucket}/$key\n" if($RiakFuse::params{trace} > 15);
     RiakFuse::Stats->increment("http_delete");
     my $req = HTTP::Request->new("DELETE", "http://$server/riak/$RiakFuse::params{filebucket}/$key");
+    setup_headers($req, $obj) if($obj);
     $req->header("X-Riak-Client-Id", $id);
     my $resp = $ua->request($req);
     if($resp->is_success) {
 	return 0;
+    } elsif ($resp->code == 404) {
+	return -ENOENT();
     }
     return -EIO();
 }
