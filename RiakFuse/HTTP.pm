@@ -50,7 +50,7 @@ sub put {
     $req->header("X-Riak-Client-Id", $id);
     foreach my $key (keys %$obj) {
 	next unless $key =~/^x-riak-meta-/i;
-	$req->header($key) = $obj->{$key};
+	$req->header($key, $obj->{$key});
     }
     $req->content($obj->{content} || "");
     my $resp = $ua->request($req);
