@@ -87,8 +87,9 @@ sub put {
 sub delete {
     my $class = shift;
     my $file  = shift;
+    my $obj = shift;
     delete($cache{$file->key});
     delete($inverse_cache{$file->key});
-    return RiakFuse::HTTP->delete($file->key);
+    return RiakFuse::HTTP->delete($file->key, $obj);
 }
 1;
