@@ -36,19 +36,23 @@ sub raw {
 sub put {
     my $class = shift;
     my $key = shift;
-    my $mime = shift;
     my $obj = shift;
-    confess "No mimetype\n" unless($mime);
-    if($mime eq 'application/json') {
-	$obj = to_json($obj);
+    confess "No mimetype\n" unless($obj->{'content-type'});
+    if($obj->{'content-type'} eq 'application/json') {
+	$obj->{content} = to_json($obj->{content});
     }
     RiakFuse::Stats->increment("http_put");
     my $server = RiakFuse->get_server;
     print ">> PUT 'http://$server/riak/$RiakFuse::params{filebucket}/$key'\n" if($RiakFuse::params{trace} > 15);
     my $req = HTTP::Request->new("PUT", "http://$server/riak/$RiakFuse::params{filebucket}/$key");
-    $req->header("Content-Type", $mime);
+    $req->header("Content-Type", $obj->{'content-type'});
+    $req->header("X-Riak-Vclock", $obj->{'x-riak-vclock'}) if($obj->{'x-riak-vclock'});
     $req->header("X-Riak-Client-Id", $id);
-    $req->content($obj || "");
+    foreach my $key (keys %$obj) {
+	next unless $key =~/^x-riak-meta-/i;
+	$req->header($key) = $obj->{$key};
+    }
+    $req->content($obj->{content} || "");
     my $resp = $ua->request($req);
     if($resp->is_success) {
 	return 0;

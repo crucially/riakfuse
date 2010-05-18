@@ -132,7 +132,7 @@ sub my_setxattr {
     return -ENOENT() unless ref $parent;
     return -ENOENT() unless exists $parent->{content}->{$file->name};
     $parent->{content}->{$file->name}->{xattr}->{$xattr_key} = $xattr_value;
-    RiakFuse::Data->put($file->parent, "application/json", $parent->{content});
+    RiakFuse::Data->put($file->parent, $parent);
     return 0;
 }
 
@@ -180,7 +180,7 @@ sub my_chown {
     $parent->{content}->{$file->name}->{uid} = $uid;
     $parent->{content}->{$file->name}->{gid} = $gid;
 
-    RiakFuse::Data->put($file->parent, "application/json", $parent->{content});
+    RiakFuse::Data->put($file->parent, $parent);
     return 0;
 }
 
@@ -211,18 +211,19 @@ sub my_rename {
     }
 
     my $data = RiakFuse::Data->get($old);
-    RiakFuse::Data->put($new, $data->{'content-type'}, $data->{content});
+    delete($data->{'x-riak-vclock'});
+    RiakFuse::Data->put($new, $data);
 
     my $content;
     {
 	my $dir = RiakFuse::Data->get($old->parent);
 	$content = delete($dir->{content}->{$old->name});
-	RiakFuse::Data->put($old->parent, "application/json", $dir->{content});
+	RiakFuse::Data->put($old->parent, $dir);
     }
     {
 	my $dir = RiakFuse::Data->get($new->parent);
 	$dir->{content}->{$new->name} = $content;
-	RiakFuse::Data->put($new->parent, "application/json", $dir->{content});
+	RiakFuse::Data->put($new->parent, $dir);
     }
     RiakFuse::Data->delete($old);
 }
@@ -238,7 +239,7 @@ sub my_rmdir {
 
     my $dir = RiakFuse::Data->get($file->parent);
     delete ($dir->{content}->{$file->name});
-    RiakFuse::Data->put($file->parent, "application/json", $dir->{content});
+    RiakFuse::Data->put($file->parent, $dir);
     RiakFuse::Data->delete($file);
     return 0;
 }
@@ -249,7 +250,7 @@ sub my_unlink {
     RiakFuse::Stats->increment("unlink");
     my $dir = RiakFuse::Data->get($file->parent);
     delete($dir->{content}->{$file->name});
-    RiakFuse::Data->put($file->parent, "application/json", $dir->{content});
+    RiakFuse::Data->put($file->parent, $dir);
     RiakFuse::Data->delete($file);
 }
 
@@ -268,16 +269,15 @@ sub my_mkdir {
     }
 
     RiakFuse::Data->put($file,
-			'application/json',
 			{
-			    '.' => {},
-			    '..' => {},
+			    content => {
+				'.' => {},
+				'..' => {},
+			    },
+			    'content-type' => 'application/json',
 			});
 
-    my %tmp;
-    share(%tmp);
-
-    %tmp = (
+    $parent->{content}->{$file->name} = {
 	atime => time,
 	ctime => time,
 	filename => $file->orig,
@@ -285,10 +285,9 @@ sub my_mkdir {
 	type => $type,
 	uid  => fuse_get_context()->{"uid"},
 	gid  => fuse_get_context()->{"gid"},
-    );
-    $parent->{content}->{$file->name} =\%tmp;
+    };
 
-    RiakFuse::Data->put($file->parent, "application/json", $parent->{content});
+    RiakFuse::Data->put($file->parent, $parent);
 
     return 0;
 }
@@ -318,7 +317,7 @@ sub my_truncate {
     my $obj  = RiakFuse::Data->get($file);
     my $len = length($obj->{content});
     substr($obj->{content}, $offset, $len - $offset, "");
-    RiakFuse::Data->put($file, $obj->{'content-type'}, $obj->{content});
+    RiakFuse::Data->put($file, $obj);
     return 0;
 }
 
@@ -346,7 +345,7 @@ sub my_write {
     my $len = length($buffer);
     my $obj = RiakFuse::Data->get($file);
     my $written = substr($obj->{content}, $offset, $len, $buffer);
-    my $error = RiakFuse::Data->put($file, $obj->{"content-type"}, $obj->{content});
+    my $error = RiakFuse::Data->put($file, $obj);
     return $error if($error != 0);
     return $len;
 }
@@ -376,9 +375,11 @@ sub my_mknod {
 	gid  => fuse_get_context()->{"gid"},
     };
 
-    RiakFuse::Data->put($file->parent, "application/json", $node->{content});
+    RiakFuse::Data->put($file->parent, $node);
 
-    RiakFuse::Data->put($file, "application/octect-stream", "");
+    RiakFuse::Data->put($file, {
+	'content-type' => 'application/octect-stream',
+	'content' => ''});
 
     return 0;
 }
