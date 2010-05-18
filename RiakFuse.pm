@@ -262,32 +262,46 @@ sub my_mkdir {
     my $type = $mode >> 9;
     $mode = ($mode - ($type << 9));
 
-    my $parent = RiakFuse::Data->get($file->parent);
-    
-    if($parent->{content}->{$file->name}) {
-	return -EEXIST();
+    for (1..5) {
+	my $parent = RiakFuse::Data->get($file->parent);
+	
+	if($parent->{content}->{$file->name}) {
+	    return -EEXIST();
+	}
+	
+	my $rv = RiakFuse::Data->put($file,
+				     {
+					 content => {
+				    '.' => {},
+				    '..' => {},
+					 },
+					 'content-type' => 'application/json',
+					 'if-match' => ''
+				     });
+	print "rv is $rv\n";
+	return $rv if $rv < 0;
+	
+	$parent->{content}->{$file->name} = {
+	    atime => time,
+	    ctime => time,
+	    filename => $file->orig,
+	    mode => $mode,
+	    type => $type,
+	    uid  => fuse_get_context()->{"uid"},
+	    gid  => fuse_get_context()->{"gid"},
+	};
+	$parent->{'if-match'} = $parent->{'etag'};
+	$rv = RiakFuse::Data->put($file->parent, $parent);
+	print "rv is $rv\n";
+	return $rv if $rv <= 0;
+	if ($rv == 1) {
+	    print "try again\n";
+	    # oops we failed we need to retry
+	    next;
+	} else {
+	    die "unknown rv value $rv\n";
+	}
     }
-
-    RiakFuse::Data->put($file,
-			{
-			    content => {
-				'.' => {},
-				'..' => {},
-			    },
-			    'content-type' => 'application/json',
-			});
-
-    $parent->{content}->{$file->name} = {
-	atime => time,
-	ctime => time,
-	filename => $file->orig,
-	mode => $mode,
-	type => $type,
-	uid  => fuse_get_context()->{"uid"},
-	gid  => fuse_get_context()->{"gid"},
-    };
-
-    RiakFuse::Data->put($file->parent, $parent);
 
     return 0;
 }
