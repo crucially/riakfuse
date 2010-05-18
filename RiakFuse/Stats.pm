@@ -13,7 +13,9 @@ use Data::Dumper;
 
 my %files = (
     servers => \&get_servers,
-    counters => \&get_counters,,
+    counters => \&get_counters,
+    riak_nodes => \&get_riak_nodes,
+    clients => \&get_clients,
     );
 
 
@@ -42,21 +44,18 @@ sub start {
     $servers = \%RiakFuse::servers;
  
 
-    RiakFuse::HTTP->timeout(1);
+    RiakFuse::HTTP->timeout(5);
 
 # disable this until I can get the server list from riak
 #    # get initial list
 
-#    my $resp = RiakFuse::HTTP->raw("GET","$params->{server}/stats");
-#    if (!$resp->is_success) {
-#	print "Cannot reach server $params->{server}\n";
-#	POSIX::_exit(255);
-#    }
-#    my $stats = from_json($resp->content);
+
 
     lock(%RiakFuse::servers);
 
     for my $server (@{$params->{servers}}) {
+	    print "server is $server\n";
+
 	{
 	    my $resp = RiakFuse::HTTP->raw("GET","http://$server/stats");
 	    if($resp->is_success) {
@@ -65,21 +64,72 @@ sub start {
 		$RiakFuse::servers{$server} = 0;
 	    }
 	}
-#	threads->new(sub {
-#	    RiakFuse::HTTP->timeout(1);
-#	    while(1) {
-#		sleep 1;
-#		my $resp = RiakFuse::HTTP->raw("GET","http://$server/stats");
-#		if($resp->is_success) {
-#		    $RiakFuse::servers{$server} = 1;
-#		} else {
-#		    $RiakFuse::servers{$server} = 0;
-#		}
-#	    }})->detach;
+	threads->new(sub {
+	    RiakFuse::HTTP->timeout(5);
+	    while(1) {
+		sleep 1;
+		my $resp = RiakFuse::HTTP->raw("GET","http://$server/stats");
+		if($resp->is_success) {
+		    $RiakFuse::servers{$server} = 1;
+		} else {
+		    $RiakFuse::servers{$server} = 0;
+		}
+	    }})->detach;
     }
     cond_signal(%RiakFuse::servers);
 
+    
+    threads->new(\&record_stats)->detach;
+    
+
+
+
 }
+
+
+sub record_stats {
+    while(1) {
+	my $data = RiakFuse::Data->get(RiakFuse::Filepath->new("/.riakfs/clients"));
+	$data = {} unless ref $data;
+	$data->{content} ||= {};
+	$data->{content}->{$RiakFuse::HTTP::id} = { heartbeat => time,
+						   counters => get_counters()};
+	$data->{'content-type'} = "application/json";
+	$data->{'if-match'} = $data->{'etag'};
+	my $rv = RiakFuse::Data->put(RiakFuse::Filepath->new("/.riakfs/clients"), $data);
+	next if $rv == 1;
+	sleep 1;
+    }
+}
+
+sub get_clients {
+    my ($server, $error) = RiakFuse::get_server();
+    my $data = RiakFuse::Data->get(RiakFuse::Filepath->new("/.riakfs/clients"));
+    my $content = "#clients";
+    foreach my $client (keys %{$data->{content}}) {
+	$content .= "\n\n###########################################\n";
+	$content .= "client:\t$client\n";
+	$content .= "heartbeat:\t" . gmtime($data->{content}->{$client}->{heartbeat}) . "\n";
+	$content .= "counters:\n";
+	$content .= "$data->{content}->{$client}->{counters}\n";
+    }
+    return $content;
+}
+
+sub get_riak_nodes {
+    my ($server, $error) = RiakFuse::get_server();
+    return $error if $error; 
+    my $resp = RiakFuse::HTTP->raw("GET","http://$server/stats");
+    if (!$resp->is_success) {
+	return "Cannot reach server $server\n";
+    }
+    my $stats = from_json($resp->content);
+    my $content = "# ring members\n";
+    $content .= "$_\n" for(@{$stats->{ring_members}});
+    return $content;
+}
+
+
 
 sub get_servers {
     my $content = "# server status\n";
@@ -96,7 +146,7 @@ sub get_servers {
 sub get_counters {
     my $content;
     foreach my $key (sort keys %counters) {
-	$content .= "$key\t$counters{$key}\n";
+	$content .= "\t$key\t$counters{$key}\n";
     }
     return $content;
 }

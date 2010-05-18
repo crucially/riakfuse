@@ -11,7 +11,7 @@ use RiakFuse::Data;
 use Data::Dumper;
 use HTTP::Date;
 our %params;
-use POSIX qw(ENOTEMPTY ENOENT EEXIST EACCES ENOTDIR);
+use POSIX qw(ENOTEMPTY ENOENT EEXIST EACCES ENOTDIR EIO);
 my $fuse;
 use RiakFuse::Stats;
 
@@ -36,25 +36,21 @@ sub conf {
     $params{servers}    = $opts{servers} || die;
 
 
-    if($params{threaded}) {
-	threads->new(
-	    sub {
-		RiakFuse::Stats->start(\%params);
-	    })->detach;
-	
-	{
-	    while (keys %servers == 0) {
-		print STDERR "Trying to connect to servers ( ". join(' ,', @{$params{servers}}) . " )\n";
-		lock(%servers);
-		cond_wait(%servers) if(keys %servers == 0);
-	    }
-	}
-    } else {
-	RiakFuse::HTTP->CLONE();
-	foreach my $server (@{$params{servers}}) {
-	    $servers{$server} = 1;
+
+    threads->new(
+	sub {
+	    RiakFuse::Stats->start(\%params);
+	})->detach;
+    
+    {
+	while (keys %servers == 0) {
+	    print STDERR "Trying to connect to servers ( ". join(' ,', @{$params{servers}}) . " )\n";
+	    lock(%servers);
+	    cond_wait(%servers) if(keys %servers == 0);
 	}
     }
+
+    RiakFuse::HTTP->CLONE();
 
     #mountopts => "nolocalcaches" is needed to get sane behaviour on OSX
     #sadly Fuse.pm thinks it is invalid
@@ -109,12 +105,20 @@ sub get_server {
     return $last_server if($last_server && $servers{$last_server});
 
     # XX deal with the case of no active servers
-    my @active_servers;
-    foreach my $server (keys %servers) {
-	push @active_servers, $server if($servers{$server});
+    for (1..5) {
+	my @active_servers;
+	foreach my $server (keys %servers) {
+	    push @active_servers, $server if($servers{$server});
+	}
+	unless (@active_servers) {
+	    sleep 1;
+	    warn "No active servers found\n";
+	    next;
+	}
+	$last_server = $active_servers[rand @active_servers];
+	return ($last_server, 0);
     }
-    $last_server = $active_servers[rand @active_servers];
-    return $last_server;
+    return (undef, -EIO());
 }
 
 sub my_setxattr {
@@ -451,7 +455,7 @@ sub my_mknod {
 
 
     }
-    return -EIO;
+    return -EIO();
 }
 
 sub my_getdir {
