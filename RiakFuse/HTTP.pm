@@ -29,7 +29,7 @@ sub raw {
     my $method = shift;
     my $url = shift;
     RiakFuse::Stats->increment("http_raw_$method");
-    print ">> RAW $method $url\n" if($RiakFuse::params{trace} > 15);;
+    print ">> RAW $method $url\n" if($RiakFuse::params{trace} > 25);;
     my $req = HTTP::Request->new($method, $url);
     return $ua->request($req);
 }
