@@ -22,6 +22,7 @@ use URI::Escape;
 
 our %servers : shared;
 our @servers : shared;
+our %open_paths;
 
 sub conf {
     my %opts = @_;
@@ -77,8 +78,8 @@ sub conf {
 	    rename => "RiakFuse::my_rename",
 	    chmod => "RiakFuse::my_chmod",
 	    chown => "RiakFuse::my_chown",
-	    flush => "RiakFuse::my_release",
-	    release => "RiakFuse::my_flush",
+	    flush => "RiakFuse::my_flush",
+	    release => "RiakFuse::my_release",
 	    setxattr => "RiakFuse::my_setxattr",
 	    getxattr => "RiakFuse::my_getxattr",
 	    );
@@ -197,6 +198,10 @@ sub my_release {
     my $file = RiakFuse::Filepath->new(shift());
     print "> release (".$file->orig.")\n" if($params{trace} > 3);
     RiakFuse::Stats->increment("release");
+    if($open_paths{$file->key}) {
+	$open_paths{$file->key}--;
+	delete $open_paths{$file->key} unless $open_paths{$file->key};
+    }
     return 0;
 }
 
@@ -204,6 +209,10 @@ sub my_flush {
     my $file = RiakFuse::Filepath->new(shift());
     print "> flush (".$file->orig.")\n" if($params{trace} > 3);
     RiakFuse::Stats->increment("flush");
+    if($open_paths{$file->key}) {
+	my $obj = RiakFuse::Data->get($file,1);
+	RiakFuse::Data->put($file,$obj);
+    }
     return 0;
 }
 
@@ -368,6 +377,7 @@ sub my_open {
     my $flags = shift;
     my $obj = RiakFuse::Data->get($file);
     if(ref($obj)) {
+	$open_paths{$file->key}++;
 	return 0;
     } else {
 	return -ENOSYS;
@@ -408,10 +418,12 @@ sub my_write {
     my $buffer = shift;
     my $offset = shift;
     my $len = length($buffer);
-    my $obj = RiakFuse::Data->get($file);
+    my $obj = RiakFuse::Data->get($file,1);
     my $written = substr($obj->{content}, $offset, $len, $buffer);
-    my $error = RiakFuse::Data->put($file, $obj);
-    return $error if($error != 0);
+    unless ($open_paths{$file->key}) {
+	my $error = RiakFuse::Data->put($file, $obj);
+	return $error if($error != 0);
+    }
     return $len;
 }
 
