@@ -98,7 +98,7 @@ sub record_stats {
 	$data->{'if-match'} = $data->{'etag'};
 	my $rv = RiakFuse::Data->put(RiakFuse::Filepath->new("/.riakfs/clients"), $data);
 	next if $rv == 1;
-	sleep 1;
+	sleep 30;
     }
 }
 
