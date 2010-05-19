@@ -394,7 +394,7 @@ sub my_read {
     my $offset = shift;
     return RiakFuse::Stats->stats_read($file, $request_size, $offset) if ($file->orig =~/^\/.riakfs/);
 
-    my $content = RiakFuse::Data->get($file)->{content};
+    my $content = RiakFuse::Data->get($file,1)->{content};
     print "> read $request_size att offset $offset from file " . $file->key . "\n"  if($params{trace} > 3);
 
     return substr($content, $offset, $request_size);
