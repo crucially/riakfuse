@@ -57,7 +57,7 @@ sub start {
 	    print "server is $server\n";
 
 	{
-	    my $resp = RiakFuse::HTTP->raw("GET","http://$server/stats");
+	    my $resp = RiakFuse::HTTP->raw("GET","http://$server/riak/$RiakFuse::params{filebucket}?keys=false");
 	    if($resp->is_success) {
 		$RiakFuse::servers{$server} = 1;
 	    } else {
@@ -68,7 +68,7 @@ sub start {
 	    RiakFuse::HTTP->timeout(5);
 	    while(1) {
 		sleep 1;
-		my $resp = RiakFuse::HTTP->raw("GET","http://$server/stats");
+		my $resp = RiakFuse::HTTP->raw("GET","http://$server/riak/$RiakFuse::params{filebucket}?keys=false");
 		if($resp->is_success) {
 		    $RiakFuse::servers{$server} = 1;
 		} else {
