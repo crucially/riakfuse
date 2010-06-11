@@ -66,12 +66,13 @@ my $foo = RiakFuse::MetaData::Directory->new(
 
 $root->add_child($conf, $foo);
 
+$RiakFuse::Test::MergeSleep = 0;
 my $async = threads->create(sub {
-    $RiakFuse::Test::MergeSleep = 5;
+    $RiakFuse::Test::MergeSleep = 1;
     $root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
-like($root->{link}, qr/baz/, "Baz is in there");
-like($root->{link}, qr/bar/, "Bar is in there");
-like($root->{link}, qr/foo/, "Foo is in there");
+    like($root->{link}, qr/baz/, "Baz is in there");
+    like($root->{link}, qr/bar/, "Bar is in there");
+    like($root->{link}, qr/foo/, "Foo is in there");
 			    });
 
 $root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
@@ -80,5 +81,28 @@ like($root->{link}, qr/bar/, "Bar is in there");
 like($root->{link}, qr/foo/, "Foo is in there");
 $async->join;
 
+
+$root->remove_child($conf, $foo);
+
+$root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
+like($root->{link}, qr/baz/, "Baz is in there");
+like($root->{link}, qr/bar/, "Bar is in there");
+unlike($root->{link}, qr/foo/, "Foo is in Gone");
+
+
+$root->add_child($conf, $foo);
+$root->remove_child($conf, $foo);
+$root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
+like($root->{link}, qr/baz/, "Baz is in there");
+like($root->{link}, qr/bar/, "Bar is in there");
+unlike($root->{link}, qr/foo/, "Foo is in Gone");
+
+$root->add_child($conf, $foo);
+$root->remove_child($conf, $foo);
+$root->add_child($conf, $foo);
+$root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
+like($root->{link}, qr/baz/, "Baz is in there");
+like($root->{link}, qr/bar/, "Bar is in there");
+like($root->{link}, qr/foo/, "Foo is in there");
 
 done_testing();

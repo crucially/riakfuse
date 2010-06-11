@@ -10,6 +10,8 @@ use threads::shared;
 use RiakFuse::MetaData;
 use Time::HiRes qw(time);
 
+$RiakFuse::Test::MergeSleep = 0;
+
 sub new {
     my $class = shift;
     my %params = @_;
@@ -119,6 +121,7 @@ sub merge {
 
     my %links;
     my %links_new;
+    my %links_remove;
 
     sleep $RiakFuse::Test::MergeSleep if ($RiakFuse::Test::MergeSleep);
 
@@ -133,7 +136,9 @@ sub merge {
 	    my $time = $part->header("X-Riak-Meta-RFS-client-timestamp");
 	    if ($part->header("X-Riak-Meta-Rfs-Action") eq 'create') {
 		$links_new{$path} = $time if $time > $links_new{$path};
-#	    } else if ( 
+	    } elsif ($part->header("X-Riak-Meta-Rfs-Action") eq 'remove') {
+		$links_remove{$path} = $time if $time > $links_remove{$path}
+
 	    } else {
 		$links{$path} = $time if $time > $links{$path};
 	    }
@@ -148,12 +153,17 @@ sub merge {
 	}
 
     }
+  
+    {
+	no warnings;
+	foreach my $new (keys %links_new) {
+	    $links{$new} = $links_new{$new} if($links_new{$new} > $links{$new});
+	}
 
-    foreach my $new (keys %links_new) {
-	$links{$new}++;
-
+	foreach my $remove (keys %links_remove) {
+	    delete $links{$remove} if ($links_remove{$remove} > $links{$remove})
+	}
     }
-
 
 
     my $buffer = "";
