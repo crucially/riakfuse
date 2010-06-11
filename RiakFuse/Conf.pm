@@ -8,7 +8,11 @@ package RiakFuse::Conf;
 sub new {
     my $class = shift;
     my $self = bless {}, $class;
-    my %params = shift;
+    my %params = @_;
+
+    die "No server defined" if (!$params{server} && !$params{servers});
+    my $servers = $params{servers} || {};
+    $servers->{$params{server}} = 1 if $params{server};
 
     $self->{mountopt}   = $params{mountopt} || "";
     $self->{mountpoint} = $params{mountpoint} || die "No mountpoint";
@@ -16,14 +20,24 @@ sub new {
     $self->{threaded}   = $params{threaded} || 0;
     $self->{trace}      = $params{trace} || 0;
     $self->{filebucket} = $params{filebucket} || die "No file bucket";
-    $self->{servers}    = $params{servers} || die "No servers";
+    $self->{servers}    = $servers;
     $self->{mdbucket}   = $params{mdbucket} || "$self->{filebucket}_metadata";
 
     return $self;
     
 }
 
+sub server {
+    my $self = shift;
+    foreach my $server (keys %{$self->{servers}}) {
+	return $server;
+    }
+}
 
+sub mdurl {
+    my $self = shift;
+    return "http://" . $self->server . "/riak/$self->{mdbucket}/";
+}
 
 
 
