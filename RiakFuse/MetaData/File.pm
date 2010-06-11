@@ -15,7 +15,6 @@ sub new {
     $self->SUPER::new(mode => 64, @_);
 }
 
-
 sub is_directory { 0 }
 
 sub is_file { 1 }

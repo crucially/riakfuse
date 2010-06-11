@@ -15,6 +15,7 @@ our %headers = (
     'X-Riak-Meta-RFS-key'    => 'key',
     'X-Riak-Meta-RFS-name'   => 'name',
     'X-Riak-Meta-RFS-parent'   => 'parent',
+    'X-Riak-Meta-RFS-size'   => 'size',
     );
 
 our %headers_r;
@@ -98,7 +99,7 @@ sub attr {
 
     $request->header("Content-Type", "text/plain");
 
-    foreach my $attr (qw (uid gid mode)) {
+    foreach my $attr (qw (uid gid mode size)) {
 	if (exists $attr{$attr}) {
 	    my $value = delete $attr{$attr};
 	    $request->header($RiakFuse::MetaData::headers_r{$attr}, $value);
