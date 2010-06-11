@@ -108,7 +108,7 @@ like($root->{link}, qr/foo/, "Foo is in there");
 
 $root->remove_child($conf, $bar);
 $async = threads->create(sub {
-    $RiakFuse::Test::MergeSleep = 3;
+    $RiakFuse::Test::MergeSleep = 2;
     $root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
     like($root->{link}, qr/baz/, "Baz is in there");
     unlike($root->{link}, qr/bar/, "Bar is gone");
@@ -117,4 +117,19 @@ $async = threads->create(sub {
 sleep 1;
 $root->remove_child($conf, $foo);
 $async->join;
+
+$root->attr(
+    $conf,
+    uid => 1,
+    gid => 2,
+    mode => 0766,
+    );
+
+
+$root->attr(
+    $conf,
+    uid => 4,
+    );
+
+$root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
 done_testing();

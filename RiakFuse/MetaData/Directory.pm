@@ -105,10 +105,45 @@ sub remove_child {
     $request->header("X-Riak-Meta-Rfs-Action" , "remove");
     $request->header("Content-Type", "text/plain");
     $request->header("X-Riak-Meta-RFS-client-timestamp", time());
-
+    
     LWP::UserAgent->new()->request($request);
 
 }
+
+sub attr {
+    my $self = shift;
+    my $conf  = shift;
+    my %attr = @_;
+    
+
+
+    my $request = HTTP::Request->new("POST", $conf->mdurl . $self->{key});
+
+    $request->header("Content-Type", "text/plain");
+
+    foreach my $attr (qw (uid gid mode)) {
+	if (exists $attr{$attr}) {
+	    my $value = delete $attr{$attr};
+	    $request->header($RiakFuse::MetaData::headers_r{$attr}, $value);
+	}
+
+    }
+    
+    if (exists $attr{xattr}) {
+	foreach my $xattr (keys %{$attr{xattr}}) {
+	    if ($xattr eq 'content-type') {
+		$request->header("Content-Type", $attr{xattr}->{$xattr});
+		next;
+	    } 
+	    $request->header("X-Riak-Meta-Rfs-Xattr-$xattr", $attr{xattr}->{$xattr});
+	}
+    }
+    $request->header("X-Riak-Meta-RFS-client-timestamp", time());
+    $request->header("X-Riak-Meta-Rfs-Action", 'attr');
+
+    LWP::UserAgent->new->request($request);
+}
+
 
 sub merge {
     my $class = shift;
@@ -128,9 +163,18 @@ sub merge {
     my $request = HTTP::Request->new("POST", $conf->mdurl. $key);
     $request->header("X-Riak-Vclock", $vclock);
     
+    my @attr;
+
     foreach my $part (@parts) {
 	no warnings;
+	if ($part->header("X-Riak-Meta-Rfs-Action") eq 'attr') {
+	    push @attr, $part;
+	}
+	
 	foreach my $link (split "," , $part->header("Link")) {
+
+
+
 	    my ($path) = $link =~/\<(.+)\>; riaktag=\"child\"/;
 	    next unless $path;
 	    my $time = $part->header("X-Riak-Meta-RFS-client-timestamp");
@@ -164,6 +208,15 @@ sub merge {
 	}
     }
 
+
+    
+    if (@attr) {
+	foreach my $attr ( sort { $a->header("X-Riak-Meta-RFS-client-timestamp") <=>  $b->header("X-Riak-Meta-RFS-client-timestamp") } @attr) {
+	    $request->header("X-Riak-Meta-RFS-Gid", $attr->header("X-Riak-Meta-RFS-Gid")) if($request->header("X-Riak-Meta-RFS-Gid"));
+	    $request->header("X-Riak-Meta-RFS-Uid", $attr->header("X-Riak-Meta-RFS-Uid")) if($request->header("X-Riak-Meta-RFS-Uid"));
+	    $request->header("X-Riak-Meta-RFS-Mode", $attr->header("X-Riak-Meta-RFS-Mode")) if($request->header("X-Riak-Meta-RFS-Mode"));
+	}
+    }
 
     my $buffer = "";
 
