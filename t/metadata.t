@@ -31,9 +31,7 @@ my $conf = RiakFuse::Conf->new(
 
 my $root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
 
-use Data::Dumper;
 
-print Dumper($root);
 my $bar = RiakFuse::MetaData::Directory->new(
     path => RiakFuse::Filepath->new("/bar"),
     gid  => 1,
@@ -47,13 +45,16 @@ my $baz = RiakFuse::MetaData::Directory->new(
     uid  => 1,
     mode => 0755,
     );
-done_testing();
 
-$root->add($conf, $bar);
-$root->add($conf, $baz);
+
+$root->add_child($conf, $bar);
+$root->add_child($conf, $baz);
 
 
 $root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
+
+like($root->{link}, qr/baz/, "Baz is in there");
+like($root->{link}, qr/bar/, "Bar is in there");
 
 
 my $foo = RiakFuse::MetaData::Directory->new(
@@ -63,12 +64,21 @@ my $foo = RiakFuse::MetaData::Directory->new(
     mode => 0755,
     );
 
-$root->add($conf, $foo);
+$root->add_child($conf, $foo);
 
 my $async = threads->create(sub {
     $RiakFuse::Test::MergeSleep = 5;
     $root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
+like($root->{link}, qr/baz/, "Baz is in there");
+like($root->{link}, qr/bar/, "Bar is in there");
+like($root->{link}, qr/foo/, "Foo is in there");
 			    });
 
 $root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
+like($root->{link}, qr/baz/, "Baz is in there");
+like($root->{link}, qr/bar/, "Bar is in there");
+like($root->{link}, qr/foo/, "Foo is in there");
 $async->join;
+
+
+done_testing();

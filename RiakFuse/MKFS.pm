@@ -24,8 +24,8 @@ sub clean {
 	my $resp = LWP::UserAgent->new->request(HTTP::Request->new("GET", "http://$server/riak/$filebucket?keys=yes&props=false"));
 	my $keys = decode_json($resp->content);
 	foreach my $key (@{$keys->{keys}}) {
-	    print "delete $key\n";
-	    print LWP::UserAgent->new->request(
+	    print STDERR "delete $key\n";
+	    print STDERR LWP::UserAgent->new->request(
 		HTTP::Request->new("DELETE", "http://$server/riak/$filebucket/$key")
 	    )->code . "\n";
 	}
@@ -36,8 +36,8 @@ sub clean {
 	my $resp = LWP::UserAgent->new->request(HTTP::Request->new("GET", "http://$server/riak/$mdbucket?keys=yes&props=false"));
 	my $keys = decode_json($resp->content);
 	foreach my $key (@{$keys->{keys}}) {
-	    print "delete $key\n";
-	    print LWP::UserAgent->new->request(
+	    print STDERR "delete $key\n";
+	    print STDERR LWP::UserAgent->new->request(
 		HTTP::Request->new("DELETE", "http://$server/riak/$mdbucket/$key")
 	    )->code . "\n";
 	}

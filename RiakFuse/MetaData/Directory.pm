@@ -37,7 +37,7 @@ sub get {
 #    print "Fetching $path\n";
     my $request = HTTP::Request->new("GET", $conf->mdurl . $path);
 
-    print "Fetching " . threads->tid . "\n";
+
     for (1..100) {
 	# make sure we can get all copies in here
 	$request->header("Accept", "multipart/mixed, */*;q=0.5");
@@ -45,7 +45,6 @@ sub get {
 	my $response = LWP::UserAgent->new->request($request);
 
 	if($response->code == 300) {
-	    print ">> merging " . threads->tid . "\n";
 	    # need to merge the different changes and then restart
 	    $self->merge($conf, $response, $path);
 	    next;
@@ -78,23 +77,35 @@ sub save {
 
 }
 
-sub add {
+sub add_child {
     my $parent = shift;
     my $conf   = shift;
     my $child  = shift;
 
     my $request = HTTP::Request->new("POST", $conf->mdurl . $parent->{key});
     
-#    foreach my $header (keys %RiakFuse::MetaData::headers_r) {
-#	$request->header($RiakFuse::MetaData::headers_r{$header}, $parent->{$header});
-#	
-#    }
     $request->header("Link", "<" . "/riak/" . $conf->mdbucket . "/" .$child->{key}  . '>; riaktag="child"');
-    $request->header("X-Riak-Meta-Rfs-Action" , "add");
+    $request->header("X-Riak-Meta-Rfs-Action" , "create");
     $request->header("Content-Type", "text/plain");
     $request->header("X-Riak-Meta-RFS-client-timestamp", time());
 
     LWP::UserAgent->new()->request($request);
+}
+
+sub remove_child {
+    my $parent = shift;
+    my $conf = shift;
+    my $child = shift;
+
+    my $request = HTTP::Request->new("POST", $conf->mdurl . $parent->{key});
+    
+    $request->header("Link", "<" . "/riak/" . $conf->mdbucket . "/" .$child->{key}  . '>; riaktag="child"');
+    $request->header("X-Riak-Meta-Rfs-Action" , "remove");
+    $request->header("Content-Type", "text/plain");
+    $request->header("X-Riak-Meta-RFS-client-timestamp", time());
+
+    LWP::UserAgent->new()->request($request);
+
 }
 
 sub merge {
@@ -122,6 +133,7 @@ sub merge {
 	    my $time = $part->header("X-Riak-Meta-RFS-client-timestamp");
 	    if ($part->header("X-Riak-Meta-Rfs-Action") eq 'create') {
 		$links_new{$path} = $time if $time > $links_new{$path};
+#	    } else if ( 
 	    } else {
 		$links{$path} = $time if $time > $links{$path};
 	    }
