@@ -4,6 +4,7 @@
 
 use strict;
 use warnings;
+use POSIX qw(EIO ENOENT ENOSYS EEXIST EPERM O_RDONLY O_RDWR O_APPEND O_CREAT);
 
 use threads;
 
@@ -73,6 +74,10 @@ $baz = RiakFuse::MetaData->get($conf, RiakFuse::Filepath->new("/baz"));
 
 
 is_deeply($baz->children, ['blah']);
+
+my $notexist = RiakFuse::MetaData->get($conf, RiakFuse::Filepath->new("/baz/dsf"));
+
+is($notexist->{errno}, -ENOENT());
 
 
 done_testing();
