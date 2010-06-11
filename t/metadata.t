@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 
-
+use threads;
 
 use Test::More;
 
@@ -65,4 +65,10 @@ my $foo = RiakFuse::MetaData::Directory->new(
 
 $root->add($conf, $foo);
 
+my $async = threads->create(sub {
+    $RiakFuse::Test::MergeSleep = 5;
+    $root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
+			    });
+
 $root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
+$async->join;

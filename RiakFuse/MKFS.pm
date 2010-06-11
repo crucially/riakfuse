@@ -8,7 +8,7 @@ use LWP::UserAgent;
 
 package RiakFuse::MKFS;
 use JSON;
-
+use Time::HiRes qw(time);
 
 #XXX make it take a conf object
 
@@ -60,6 +60,7 @@ sub make {
     $req->header("X-Riak-Meta-RFS-key", "%2F");
     $req->header("X-Riak-Meta-RFS-name", "");
     $req->header("X-Riak-Meta-RFS-parent", "");
+    $req->header("X-Riak-Meta-RFS-client-timestamp", time());
     $req->header("Content-Type", "text/plain");
     LWP::UserAgent->new->request($req);
 

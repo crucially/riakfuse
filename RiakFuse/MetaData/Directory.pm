@@ -8,6 +8,7 @@ use HTTP::Request;
 use HTTP::Date;
 use threads::shared;
 use RiakFuse::MetaData;
+use Time::HiRes qw(time);
 
 sub new {
     my $class = shift;
@@ -17,7 +18,7 @@ sub new {
     die unless $params{path};
     $self->{key}    = $params{path}->key;
     $self->{name}   = $params{path}->name;
-    $self->{parent} = $params{path}->parent;
+    $self->{parent} = $params{path}->parent->key;
     $self->{gid}    = $params{gid}   || die "No gid";
     $self->{uid}    = $params{uid}   || die "No uid";
     $self->{mtime}  = $params{mtime} || 0;
@@ -33,9 +34,10 @@ sub get {
     my $conf = shift;
     my $path = shift;
     $path = $path->key if (ref($path));
-    print "Fetching $path\n";
+#    print "Fetching $path\n";
     my $request = HTTP::Request->new("GET", $conf->mdurl . $path);
 
+    print "Fetching " . threads->tid . "\n";
     for (1..100) {
 	# make sure we can get all copies in here
 	$request->header("Accept", "multipart/mixed, */*;q=0.5");
@@ -43,6 +45,7 @@ sub get {
 	my $response = LWP::UserAgent->new->request($request);
 
 	if($response->code == 300) {
+	    print ">> merging " . threads->tid . "\n";
 	    # need to merge the different changes and then restart
 	    $self->merge($conf, $response, $path);
 	    next;
@@ -89,9 +92,9 @@ sub add {
     $request->header("Link", "<" . "/riak/" . $conf->mdbucket . "/" .$child->{key}  . '>; riaktag="child"');
     $request->header("X-Riak-Meta-Rfs-Action" , "add");
     $request->header("Content-Type", "text/plain");
-    print $request->as_string;
+    $request->header("X-Riak-Meta-RFS-client-timestamp", time());
 
-    print LWP::UserAgent->new()->request($request)->as_string
+    LWP::UserAgent->new()->request($request);
 }
 
 sub merge {
@@ -106,7 +109,7 @@ sub merge {
     my %links;
     my %links_new;
 
-
+    sleep $RiakFuse::Test::MergeSleep if ($RiakFuse::Test::MergeSleep);
 
     my $request = HTTP::Request->new("POST", $conf->mdurl. $key);
     $request->header("X-Riak-Vclock", $vclock);
@@ -116,10 +119,11 @@ sub merge {
 	foreach my $link (split "," , $part->header("Link")) {
 	    my ($path) = $link =~/\<(.+)\>; riaktag=\"child\"/;
 	    next unless $path;
+	    my $time = $part->header("X-Riak-Meta-RFS-client-timestamp");
 	    if ($part->header("X-Riak-Meta-Rfs-Action") eq 'create') {
-		$links_new{$path}++;
+		$links_new{$path} = $time if $time > $links_new{$path};
 	    } else {
-		$links{$path}++;
+		$links{$path} = $time if $time > $links{$path};
 	    }
 	}
 
@@ -151,10 +155,13 @@ sub merge {
     }
     $request->push_header("Link", $buffer) if($buffer);
     $request->header("Content-Type", "text/plain");
+    $request->header("X-Riak-Meta-RFS-client-timestamp", time());
 
-
-    print $request->as_string;
-    print LWP::UserAgent->new()->request($request)->as_string;
+#    print "merging\n";
+#    print $response->as_string;
+#    print $request->as_string;
+    
+    LWP::UserAgent->new()->request($request);
 }
 
 1;
