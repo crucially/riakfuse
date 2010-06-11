@@ -53,11 +53,13 @@ sub make {
 
     my $req = HTTP::Request->new("POST", "http://$server/riak/$mdbucket/%2F");
     $req->header("X-Riak-Meta-RFS-ctime", time);
-    $req->header("X-Riak-Meta-RFS-mtime", time);
     $req->header("X-Riak-Meta-RFS-uid", $<);
     $req->header("X-Riak-Meta-RFS-gid", int($());
     $req->header("X-Riak-Meta-RFS-mode", 0755);
     $req->header("X-Riak-Meta-RFS-type", 0040);
+    $req->header("X-Riak-Meta-RFS-key", "%2F");
+    $req->header("X-Riak-Meta-RFS-name", "");
+    $req->header("X-Riak-Meta-RFS-parent", "");
     $req->header("Content-Type", "text/plain");
     LWP::UserAgent->new->request($req);
 
