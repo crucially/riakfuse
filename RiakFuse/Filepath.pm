@@ -13,7 +13,7 @@ sub new {
 
     
 
-    $self->{key} = uri_escape($filename, "^A-Za-z0-9");
+    $self->{key} = uri_escape($filename, "/");
     
     my @path = split "/", $filename;
 
