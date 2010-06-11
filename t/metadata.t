@@ -13,7 +13,8 @@ our $mdbucket   = "md-testmd";
 
 require_ok("RiakFuse::MetaData::Directory");
 require_ok("RiakFuse::MKFS");
-
+require_ok("RiakFuse::Conf");
+require_ok("RiakFuse::Filepath");
 
 RiakFuse::MKFS->clean($server, $filebucket, $mdbucket);
 
@@ -28,8 +29,40 @@ my $conf = RiakFuse::Conf->new(
 
 
 
+my $root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
 
+use Data::Dumper;
+
+print Dumper($root);
+my $bar = RiakFuse::MetaData::Directory->new(
+    path => RiakFuse::Filepath->new("/bar"),
+    gid  => 1,
+    uid  => 1,
+    mode => 0755,
+    );
+
+my $baz = RiakFuse::MetaData::Directory->new(
+    path => RiakFuse::Filepath->new("/baz"),
+    gid  => 1,
+    uid  => 1,
+    mode => 0755,
+    );
 done_testing();
 
+$root->add($conf, $bar);
+$root->add($conf, $baz);
 
 
+$root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
+
+
+my $foo = RiakFuse::MetaData::Directory->new(
+    path => RiakFuse::Filepath->new("/foo"),
+    gid  => 1,
+    uid  => 1,
+    mode => 0755,
+    );
+
+$root->add($conf, $foo);
+
+$root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
