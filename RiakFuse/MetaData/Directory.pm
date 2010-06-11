@@ -74,8 +74,6 @@ sub save {
     
     my $parent = $self->get($conf, $self->{parent});
 
-    $parent->add($conf, $self);
-    
 
 }
 
@@ -84,14 +82,31 @@ sub add_child {
     my $conf   = shift;
     my $child  = shift;
 
-    my $request = HTTP::Request->new("POST", $conf->mdurl . $parent->{key});
     
-    $request->header("Link", "<" . "/riak/" . $conf->mdbucket . "/" .$child->{key}  . '>; riaktag="child"');
-    $request->header("X-Riak-Meta-Rfs-Action" , "create");
-    $request->header("Content-Type", "text/plain");
-    $request->header("X-Riak-Meta-RFS-client-timestamp", time());
+    {
+	#parent
+	my $request = HTTP::Request->new("POST", $conf->mdurl . $parent->{key});
+	
+	$request->header("Link", "<" . "/riak/" . $conf->mdbucket . "/" .$child->{key}  . '>; riaktag="child"');
+	$request->header("X-Riak-Meta-Rfs-Action" , "create");
+	$request->header("Content-Type", "text/plain");
+	$request->header("X-Riak-Meta-RFS-client-timestamp", time());
+	
+	LWP::UserAgent->new()->request($request);
+    }
+    {
+	#child
+	my $request = HTTP::Request->new("POST", $conf->mdurl . $child->{key});
+	$request->header("Content-Type", "text/plain");
+	foreach my $header (keys %RiakFuse::MetaData::headers_r) {
+	    $request->header($RiakFuse::MetaData::headers_r{$header}, $child->{$header});
+	    $request->header("X-Riak-Meta-RFS-client-timestamp", time());
+	}
+	LWP::UserAgent->new()->request($request);
+    }
 
-    LWP::UserAgent->new()->request($request);
+    
+    
 }
 
 sub remove_child {
@@ -108,6 +123,9 @@ sub remove_child {
     
     LWP::UserAgent->new()->request($request);
 
+
+    my $delete = HTTP::Request->new("DELETE", $conf->mdurl . $child->{key});
+    LWP::UserAgent->new()->request($delete);
 }
 
 sub attr {

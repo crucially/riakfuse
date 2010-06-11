@@ -132,4 +132,10 @@ $root->attr(
     );
 
 $root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
+$root->add_child($conf, $foo);
+
+my $test = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/foo"));
+use Data::Dumper;
+print Dumper($test);
+
 done_testing();
