@@ -137,10 +137,9 @@ sub merge {
 	    if ($part->header("X-Riak-Meta-Rfs-Action") eq 'create') {
 		$links_new{$path} = $time if $time > $links_new{$path};
 	    } elsif ($part->header("X-Riak-Meta-Rfs-Action") eq 'remove') {
-		$links_remove{$path} = $time if $time > $links_remove{$path}
-
+		$links_remove{$path} = $time if $time > $links_remove{$path};
 	    } else {
-		$links{$path} = $time if $time > $links{$path};
+		$links{$path}++;
 	    }
 	}
 
@@ -153,15 +152,15 @@ sub merge {
 	}
 
     }
-  
+
     {
 	no warnings;
 	foreach my $new (keys %links_new) {
-	    $links{$new} = $links_new{$new} if($links_new{$new} > $links{$new});
+	    $links{$new} = $links_new{$new};
 	}
 
 	foreach my $remove (keys %links_remove) {
-	    delete $links{$remove} if ($links_remove{$remove} > $links{$remove})
+	    delete $links{$remove} if ($links_remove{$remove} >  $links{$remove});
 	}
     }
 
@@ -177,9 +176,9 @@ sub merge {
     }
     $request->push_header("Link", $buffer) if($buffer);
     $request->header("Content-Type", "text/plain");
-    $request->header("X-Riak-Meta-RFS-client-timestamp", time());
+#    $request->header("X-Riak-Meta-RFS-client-timestamp", time());
 
-#    print "merging\n";
+
 #    print $response->as_string;
 #    print $request->as_string;
     

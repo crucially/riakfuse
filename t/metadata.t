@@ -68,7 +68,7 @@ $root->add_child($conf, $foo);
 
 $RiakFuse::Test::MergeSleep = 0;
 my $async = threads->create(sub {
-    $RiakFuse::Test::MergeSleep = 1;
+    $RiakFuse::Test::MergeSleep = 2;
     $root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
     like($root->{link}, qr/baz/, "Baz is in there");
     like($root->{link}, qr/bar/, "Bar is in there");
@@ -105,4 +105,16 @@ like($root->{link}, qr/baz/, "Baz is in there");
 like($root->{link}, qr/bar/, "Bar is in there");
 like($root->{link}, qr/foo/, "Foo is in there");
 
+
+$root->remove_child($conf, $bar);
+$async = threads->create(sub {
+    $RiakFuse::Test::MergeSleep = 3;
+    $root = RiakFuse::MetaData::Directory->get($conf, RiakFuse::Filepath->new("/"));
+    like($root->{link}, qr/baz/, "Baz is in there");
+    unlike($root->{link}, qr/bar/, "Bar is gone");
+    unlike($root->{link}, qr/foo/, "Foo is gone");
+			 });
+sleep 1;
+$root->remove_child($conf, $foo);
+$async->join;
 done_testing();
