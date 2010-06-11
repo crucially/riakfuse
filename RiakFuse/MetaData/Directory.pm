@@ -18,7 +18,17 @@ sub new {
     $self->SUPER::new(mode => 0400, @_);
 }
 
+sub children {
+    my $self = shift;
+    my @path;
+    foreach my $link (split "," , $self->{link}) {
+	my ($path) = $link =~/\<.+\%2F(.+?)\>; riaktag=\"child\"/;
+	next unless $path;
+	push @path, $path;
 
+    }
+    return \@path;
+}
 
 sub add_child {
     my $parent = shift;
@@ -73,6 +83,9 @@ sub remove_child {
 
 
 
+sub is_directory { 1 }
+
+sub is_file { 0 }
 
 
 
