@@ -29,7 +29,7 @@ sub new {
 
 sub server {
     my $self = shift;
-    foreach my $server (keys %{$self->{servers}}) {
+    foreach my $server (@{$self->{servers}}) {
 	return $server;
     }
 }
