@@ -141,11 +141,13 @@ sub attr {
     my $response = LWP::UserAgent->new->request($request);
 
     if (!$response->is_success) {
-      RiakFuse::Error->new(
+      return RiakFuse::Error->new(
 	  response => $response,
 	  errno    => -EIO(),
 	  );
     }
+    return $self;
+    
 }
 
 
