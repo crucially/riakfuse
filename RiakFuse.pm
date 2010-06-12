@@ -65,8 +65,8 @@ sub run {
 
 
 	    rename => "RiakFuse::my_rename",
-#	    chmod => "RiakFuse::my_chmod",
-#	    chown => "RiakFuse::my_chown",
+	    chmod => "RiakFuse::my_chmod",
+	    chown => "RiakFuse::my_chown",
 #	    flush => "RiakFuse::my_flush",
 #	    release => "RiakFuse::my_release",
 #	    setxattr => "RiakFuse::my_setxattr",
@@ -171,15 +171,21 @@ sub my_chown {
     my $uid = shift;
     my $gid = shift;
 
-    my $parent = RiakFuse::Data->get($file->parent);
+    my %args;
 
-    return -ENOENT() unless ref $parent;
-    return -ENOENT() unless exists $parent->{content}->{$file->name};
+    $args{uid} = $uid if $uid > 0;
+    $args{gid} = $gid if $gid > 0;
 
-    $parent->{content}->{$file->name}->{uid} = $uid;
-    $parent->{content}->{$file->name}->{gid} = $gid;
+    my $entry = RiakFuse::MetaData->get($conf, $file);
 
-    RiakFuse::Data->put($file->parent, $parent);
+    return $entry->{errno} if $entry->is_error;
+
+
+
+    my $response = $entry->attr($conf, 
+				%args,
+	);
+    return $response->{errno} if $response->is_error;
     return 0;
 }
 
