@@ -8,82 +8,67 @@ use threads::shared;
 
 use RiakFuse::Filepath;
 use RiakFuse::Data;
+use RiakFuse::MetaData::Directory;
+use RiakFuse::MetaData::File;
+
 use Data::Dumper;
 use HTTP::Date;
-our %params;
+
 use POSIX qw(ENOTEMPTY ENOENT EEXIST EACCES ENOTDIR EIO);
 my $fuse;
 use RiakFuse::Stats;
 
 use Fuse qw(:xattr fuse_get_context);
 
+use Time::HiRes qw(time);
+
+my $timer;
+sub start_timer {
+    $timer = time;
+}
+
+sub stop_timer {
+    my $duration = time - $timer;
+    print STDERR ">>> Duration " . $duration . "\n";
+}
 
 use URI::Escape;
 
 our %servers : shared;
 our @servers : shared;
 our %open_paths;
+our $conf;
+our %params = (trace => 0);
+sub run {
+    my $class = shift;
+    $conf = shift;
 
-sub conf {
-    my %opts = @_;
-    $params{mountopt}   = $opts{mountopt} || "";
-    $params{mountpoint} = $opts{mountpoint} || die;
-    $params{debug} =      $opts{debug} || 0;
-    $params{threaded} =   0,
-    $params{trace}    =   $opts{trace}    || 0;
-    $params{bufferdir}  = $opts{bufferdir} || die;
-    $params{filebucket} = $opts{filebucket} || die;
-    $params{logbucket}  = $opts{logbucket} || die;
-    $params{servers}    = $opts{servers} || die;
-
-
-
-    threads->new(
-	sub {
-	    RiakFuse::Stats->start(\%params);
-	})->detach;
-    
-    {
-	while (keys %servers == 0) {
-	    print STDERR "Trying to connect to servers ( ". join(' ,', @{$params{servers}}) . " )\n";
-	    lock(%servers);
-	    cond_wait(%servers) if(keys %servers == 0);
-	}
-    }
-
-    RiakFuse::HTTP->CLONE();
-
-    #mountopts => "nolocalcaches" is needed to get sane behaviour on OSX
-    #sadly Fuse.pm thinks it is invalid
-    #also makes everything every very slow
-
-    threads->new(sub {
 	$fuse = Fuse::main(
-	    mountpoint => $params{mountpoint},
-	    mountopts => $params{mountopt},
-	    debug      => $params{debug},
-	    threaded   => $params{threaded},
+	    mountpoint => $conf->{mountpoint},
+	    mountopts => $conf->{mountopt},
+	    debug      => $conf->{debug},
+	    threaded   => $conf->{threaded},
 	    getattr => 'RiakFuse::my_getattr',
 	    statfs  => 'RiakFuse::my_statfs',
 	    getdir =>"RiakFuse::my_getdir",
 	    mknod  => "RiakFuse::my_mknod",
-	    utime => "RiakFuse::my_utime",
-	    write  => "RiakFuse::my_write",
-	    read   => "RiakFuse::my_read",
-	    truncate => "RiakFuse::my_truncate",
-	    open   =>"RiakFuse::my_open",
-	    mkdir => "RiakFuse::my_mkdir",
-	    unlink => "RiakFuse::my_unlink",
-	    rmdir => "RiakFuse::my_rmdir",
-	    rename => "RiakFuse::my_rename",
-	    chmod => "RiakFuse::my_chmod",
-	    chown => "RiakFuse::my_chown",
-	    flush => "RiakFuse::my_flush",
-	    release => "RiakFuse::my_release",
-	    setxattr => "RiakFuse::my_setxattr",
-	    getxattr => "RiakFuse::my_getxattr",
-	    );
-		 })->join;
+#	    utime => "RiakFuse::my_utime",
+#	    write  => "RiakFuse::my_write",
+#	    read   => "RiakFuse::my_read",
+#	    truncate => "RiakFuse::my_truncate",
+#	    open   =>"RiakFuse::my_open",
+#	    mkdir => "RiakFuse::my_mkdir",
+#	    unlink => "RiakFuse::my_unlink",
+#	    rmdir => "RiakFuse::my_rmdir",
+#	    rename => "RiakFuse::my_rename",
+#	    chmod => "RiakFuse::my_chmod",
+#	    chown => "RiakFuse::my_chown",
+#	    flush => "RiakFuse::my_flush",
+#	    release => "RiakFuse::my_release",
+#	    setxattr => "RiakFuse::my_setxattr",
+#	    getxattr => "RiakFuse::my_getxattr",
+#	    );
+	);
     
 }
 
@@ -151,7 +136,7 @@ sub my_getxattr {
     my $xattr = shift;
     print "> getxattr (".$file->orig.") -> ($xattr)\n" if($params{trace} > 1);
     RiakFuse::Stats->increment("getxattr");
-    my $parent = RiakFuse::Data->get($file->parent);
+    my $parent = RiakFuse::Data->get($file->parent,1);
 
     return -ENOENT() unless ref $parent;
     return -ENOENT() unless exists $parent->{content}->{$file->name};
@@ -301,7 +286,8 @@ sub my_unlink {
 
 	# delete the file, abort on error unless we have already tried to delete it
 	# worse case is that a directory has a empty file pointer
-	my $rv = RiakFuse::Data->delete($file);
+	my $obj = RiakFuse::Data->head($file);
+	my $rv = RiakFuse::Data->delete($file, $obj);
 	return $rv if($rv < 0 && $_ == 1);
 
 	delete($dir->{content}->{$file->name});
@@ -380,7 +366,7 @@ sub my_open {
 	$open_paths{$file->key}++;
 	return 0;
     } else {
-	return -ENOSYS;
+	return $obj;
     }
 }
 
@@ -419,6 +405,7 @@ sub my_write {
     my $offset = shift;
     my $len = length($buffer);
     my $obj = RiakFuse::Data->get($file,1);
+    return $obj unless ref $obj;
     my $written = substr($obj->{content}, $offset, $len, $buffer);
     unless ($open_paths{$file->key}) {
 	my $error = RiakFuse::Data->put($file, $obj);
@@ -430,69 +417,49 @@ sub my_write {
 
 sub my_mknod {
     my $file = RiakFuse::Filepath->new(shift());
-    print "> mknod ($file->{orig})\n" if($params{trace} > 3);
+#    print "> mknod ($file->{orig})\n" if($params{trace} > 3);
     RiakFuse::Stats->increment("mknod");
     my $mode = shift;
     my $dev = shift;
     my $type = $mode >> 9;
     $mode = ($mode - ($type << 9));
 
-    for (1..5) {
-	my $node = RiakFuse::Data->get($file->parent);
-	return $node unless ref $node;
 
-	return -EEXIST() if (exists($node->{content}->{$file->name}));
+    my $exists = RiakFuse::MetaData->get($conf, $file);
 
-	$node->{content}->{$file->name} = {
-	    atime => time,
-	    ctime => time,
-	    filename => $file->name,
-	    mode => $mode,
-	    type => $type,
-	    uid  => fuse_get_context()->{"uid"},
-	    gid  => fuse_get_context()->{"gid"},
-	};
-	$node->{'if-match'} = $node->{'etag'};
-
-	my $rv = RiakFuse::Data->put($file, {
-	    'content-type' => 'application/octect-stream',
-	    'content' => '',
-	    'if-match' => '',
-				     });
-
-	return $rv if $rv < 0; #erro
-	$rv = RiakFuse::Data->put($file->parent, $node);
-	next if ($rv == 1); #retry
-	return $rv if $rv < 0; #erro
-	die if($rv != 0);
-	return 0;
-
-
+    if (!$exists->is_error) {
+      return -EEXIST();
+    } elsif ($exists->is_error && $exists->{errno} != -ENOENT()) {
+      return $exists->{errno};
     }
-    return -EIO();
+
+    my $entry = RiakFuse::MetaData::File->new(
+					     path => $file,
+					     gid  => fuse_get_context()->{"gid"},
+					     uid  => fuse_get_context()->{"uid"},
+					     mode => $mode,
+					     type => $type,
+					    );
+
+    my $parent = RiakFuse::MetaData->get($conf, $file->parent);
+
+    $parent->add_child($conf, $entry);
+    return 0;
 }
 
 sub my_getdir {
     print "> getdir\n" if($params{trace} > 3);
     my $file = RiakFuse::Filepath->new(shift());
     RiakFuse::Stats->increment("getdir");
-    if($file->orig =~/^\/.riakfs/) {
-	return (RiakFuse::Stats->getdir($file), 0);
-    }
 
-    my $obj = RiakFuse::Data->get($file,0);
-    my @rv = map { uri_unescape($_) } keys %{$obj->{content}};
+    my $entry = RiakFuse::MetaData->get($conf, $file);
 
-    #magic subdir full of stats
+    return (@{$entry->children}, 0);
 
-    if ($file->key eq '%2F') {
-	push @rv,".riakfs";
-    }
-    return (@rv, 0);
 }
 
 sub my_statfs {
-    print "> statfs\n" if($params{trace} > 6);
+#    print "> statfs\n" if($params{trace} > 6);
     RiakFuse::Stats->increment("statfs");
     return 255, 1, 1, 256*1024, 256*1024, 2;
 }
@@ -500,40 +467,30 @@ sub my_statfs {
 
 sub my_getattr {
     my $file = RiakFuse::Filepath->new(shift());
-    print "> getattr " . $file->orig . " (" . $file->key . ")\n"  if($params{trace} > 10);
     RiakFuse::Stats->increment("getattr");
-    if ($file->orig =~/^\/.riakfs/) {
-	return RiakFuse::Stats->getattr($file);
-    }
+#    if ($file->orig =~/^\/.riakfs/) {
+#	#return RiakFuse::Stats->getattr($file);
+#    }
 
-    my $node;
 
-    my $stat;
-    if($file->key eq '%2F') {
-	$node = RiakFuse::Data->get($file,1);
-	return $node unless ref $node;
-	#we are root so our metadata is self contained
-	$stat = $node->{content}->{'.'};
-    } else {
-	$node = RiakFuse::Data->head($file,1);
-	return $node unless ref $node;
-	my $parent = RiakFuse::Data->get($file->parent,1);
-	return $parent unless ref $parent;
-	$stat = $parent->{content}->{$file->name};
+    my $entry = RiakFuse::MetaData->get($conf, $file);
+
+    if ($entry->is_error) {
+      return $entry->{errno};
     }
 
     return (
 	0,
 	0,
-	$stat->{mode} + ($stat->{type} <<9),
+	$entry->{mode} + ($entry->{type} <<9),
 	1,
-	$stat->{uid},
-	$stat->{gid},
+	$entry->{uid},
+	$entry->{gid},
 	0, #rdev
-	$node->{'content-length'}, #size
-	$stat->{atime},
-	$node->{'last-modified'},
-	$stat->{ctime},
+	$entry->{'size'}, #size
+	time,
+	$entry->{'mtime'},
+	$entry->{'ctime'},
 	4096, #blksize
 	1, #blocks
 	);
