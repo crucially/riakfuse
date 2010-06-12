@@ -57,18 +57,18 @@ sub run {
 	    unlink => "RiakFuse::my_unlink",
 
 #	    utime => "RiakFuse::my_utime",
-#	    write  => "RiakFuse::my_write",
-#	    read   => "RiakFuse::my_read",
-#	    truncate => "RiakFuse::my_truncate",
-#	    open   =>"RiakFuse::my_open",
+	    write  => "RiakFuse::my_write",
+	    read   => "RiakFuse::my_read",
+	    truncate => "RiakFuse::my_truncate",
+	    open   =>"RiakFuse::my_open",
 
 
 
 	    rename => "RiakFuse::my_rename",
 	    chmod => "RiakFuse::my_chmod",
 	    chown => "RiakFuse::my_chown",
-#	    flush => "RiakFuse::my_flush",
-#	    release => "RiakFuse::my_release",
+	    flush => "RiakFuse::my_flush",
+	    release => "RiakFuse::my_release",
 #	    setxattr => "RiakFuse::my_setxattr",
 #	    getxattr => "RiakFuse::my_getxattr",
 #	    );
@@ -193,6 +193,7 @@ sub my_release {
     my $file = RiakFuse::Filepath->new(shift());
     print "> release (".$file->orig.")\n" if($params{trace} > 3);
     RiakFuse::Stats->increment("release");
+    return 0;
     if($open_paths{$file->key}) {
 	$open_paths{$file->key}--;
 	delete $open_paths{$file->key} unless $open_paths{$file->key};
@@ -204,6 +205,7 @@ sub my_flush {
     my $file = RiakFuse::Filepath->new(shift());
     print "> flush (".$file->orig.")\n" if($params{trace} > 3);
     RiakFuse::Stats->increment("flush");
+    return 0;
     if($open_paths{$file->key}) {
 	my $obj = RiakFuse::Data->get($file,1);
 	RiakFuse::Data->put($file,$obj);
@@ -263,6 +265,7 @@ sub my_open {
     return RiakFuse::Stats->stats_open($file) if ($file->orig =~/^\/.riakfs/);
 
     my $flags = shift;
+    return 0;
     my $obj = RiakFuse::Data->get($file);
     if(ref($obj)) {
 	$open_paths{$file->key}++;
@@ -276,6 +279,7 @@ sub my_truncate {
     RiakFuse::Stats->increment("truncate");
     my $file = RiakFuse::Filepath->new(shift());
     my $offset = shift;
+    return 0;
     print "> truncate " . $file->orig ." at $offset\n" if($params{trace} > 3);
     my $obj  = RiakFuse::Data->get($file);
     my $len = length($obj->{content});
@@ -290,12 +294,15 @@ sub my_read {
     RiakFuse::Stats->increment("read");
     my $request_size = shift;
     my $offset = shift;
-    return RiakFuse::Stats->stats_read($file, $request_size, $offset) if ($file->orig =~/^\/.riakfs/);
+#    return RiakFuse::Stats->stats_read($file, $request_size, $offset) if ($file->orig =~/^\/.riakfs/);
 
-    my $content = RiakFuse::Data->get($file,1)->{content};
-    print "> read $request_size att offset $offset from file " . $file->key . "\n"  if($params{trace} > 3);
+ 
+    print "my_read\n";
+    my $content = RiakFuse::Data->fetch($conf, $file);
 
-    return substr($content, $offset, $request_size);
+    return $content->{errno} if ($content->is_error);
+
+    return substr($content->{content}, $offset, $request_size);
 }
 
 
@@ -306,13 +313,11 @@ sub my_write {
     my $buffer = shift;
     my $offset = shift;
     my $len = length($buffer);
-    my $obj = RiakFuse::Data->get($file,1);
-    return $obj unless ref $obj;
-    my $written = substr($obj->{content}, $offset, $len, $buffer);
-    unless ($open_paths{$file->key}) {
-	my $error = RiakFuse::Data->put($file, $obj);
-	return $error if($error != 0);
-    }
+    my $content = RiakFuse::Data->fetch($conf, $file);
+    my $written = substr($content->{content}, $offset, $len, $buffer);
+    $content->save($conf);
+    my $metadata = RiakFuse::MetaData->get($conf, $file);
+    $metadata->attr($conf, size => length($content->{content}));
     return $len;
 }
 
