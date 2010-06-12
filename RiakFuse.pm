@@ -54,13 +54,15 @@ sub run {
 	    mknod  => "RiakFuse::my_mknod",
 	    mkdir => "RiakFuse::my_mkdir",
 	    rmdir => "RiakFuse::my_rmdir",
+	    unlink => "RiakFuse::my_unlink",
+
 #	    utime => "RiakFuse::my_utime",
 #	    write  => "RiakFuse::my_write",
 #	    read   => "RiakFuse::my_read",
 #	    truncate => "RiakFuse::my_truncate",
 #	    open   =>"RiakFuse::my_open",
 
-#	    unlink => "RiakFuse::my_unlink",
+
 
 #	    rename => "RiakFuse::my_rename",
 #	    chmod => "RiakFuse::my_chmod",
@@ -257,31 +259,16 @@ sub my_unlink {
     my $file = RiakFuse::Filepath->new(shift());
     print "> unlink ($file->{orig})\n" if($params{trace} > 3);
     RiakFuse::Stats->increment("unlink");
-    for (1..5) {
-	my $dir = RiakFuse::Data->get($file->parent);
+    
+    my $entry = RiakFuse::MetaData->get($conf, $file);
+    return $entry->errno if ($entry->is_error);
+    return -EIO() if($entry->is_directory);
+    my $parent = RiakFuse::MetaData->get($conf, $file->parent);
+    $parent->remove_child($conf, $entry);
 
-	# if the directory doesn't exist or doesn't load
-	return -ENOTDIR() if($dir == -ENOENT());
-	return $dir unless ref($dir);
-
-	# if the file doesn't exist in the parent
-	return -ENOENT() unless $dir->{content}->{$file->name};
-
-	# delete the file, abort on error unless we have already tried to delete it
-	# worse case is that a directory has a empty file pointer
-	my $obj = RiakFuse::Data->head($file);
-	my $rv = RiakFuse::Data->delete($file, $obj);
-	return $rv if($rv < 0 && $_ == 1);
-
-	delete($dir->{content}->{$file->name});
-	$dir->{'if-match'} = $dir->{'etag'};
-	$rv = RiakFuse::Data->put($file->parent, $dir);
-	next if($rv == 1); #retry
-	return $rv if($rv < 0); #error
-	return 0;
-    }
-    return -EIO();
+    return 0;
 }
+
 
 
 
