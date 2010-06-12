@@ -2,94 +2,51 @@
 use strict;
 use warnings;
 package RiakFuse::Data;
-use RiakFuse::HTTP;
+
 use threads::shared;
 use Data::Dumper;
-my %on_disk;
+use LWP::UserAgent;
+use HTTP::Request;
+use RiakFuse::Error;
+use POSIX qw(EIO ENOENT ENOSYS EEXIST EPERM O_RDONLY O_RDWR O_APPEND O_CREAT);
 
-my %cache;
-my %inverse_cache;
 
 sub fetch {
     my $class = shift;
-    my $file = shift;
-    my $method = shift;
-    my $cache_ok = shift || 0;
-    my $obj;
+    my $conf  = shift;
+    my $path  = shift;
 
-    if(my $neg = $inverse_cache{$file->key}) {
-	if($neg->{stored} >= time) {
-	    RiakFuse::Stats->increment("data_fetch_error_cached");
-	    return $neg->{error};
-	}
-	delete $inverse_cache{$file->key};
+
+    my $request = HTTP::Request->new("GET", $conf->fsurl . $path->key);
+
+    my $response = LWP::UserAgent->new->request($request);
+
+    my $self = bless {};
+
+    $self->{key} = $path->{key};
+    $self->{content} = "";
+
+    if ($response->code == 404) {
+	#assume that nothing is there, we got the reference so return empty
+	return $self;
+    }
+    if ($response->code== 200) {
+	$self->{content} = $request->content();
+	return $self;
     }
 
-    my $cached = $cache{$file->key};
-    if($cached &&
-	(($method eq 'get' && exists $cached->{content}) || $method eq 'head')) {
-	if($cache_ok && $cached->{stored} >= time) {
-	    RiakFuse::Stats->increment("data_fetch_cached");
-	    return $cached;
-	}
-	RiakFuse::Stats->increment("data_fetch_cond_attempt");
-	$obj = RiakFuse::HTTP->$method($file->key, $cached->{'etag'});
-	if($obj == 0) {
-	    $cached->{stored} = time;
-	    RiakFuse::Stats->increment("data_fetch_cond_success");
-	    return $cached;
-	}
-    } else {
-	$obj = RiakFuse::HTTP->$method($file->key); 
-    }
-
-    unless (ref($obj)) {
-	$inverse_cache{$file->key} = {
-	    error => $obj,
-	    stored => time};
-	RiakFuse::Stats->increment("data_fetch_error");
-	return $obj;
-    }
-    
-    RiakFuse::Stats->increment("data_fetch_success");
-
-    $cache{$file->key} = $obj;
-    $cache{$file->key}->{stored} = time;
-    
-    return $cache{$file->key};
-
+    return RiakFuse::Error->new(response => $response, errno => -EIO());    
 }
 
-
-sub head {
-    my $class = shift;
-    my $file = shift;
-    my $cached_ok = shift;
-    $class->fetch($file, 'head', $cached_ok);
+sub save {
+    my $self = shift;
+    my $conf = shift;
+    my $request = HTTP::Request->new("POST", $conf->fsurl . $self->{key});
+    $request->header("Content-Type" => "text/plain");
+    $request->content($self->{content});
+    my $response = LWP::UserAgent->new()->request($request);
+    print $response->as_string;
 }
 
-sub get {
-    my $class = shift;
-    my $file = shift;
-    my $cached_ok = shift;
-    $class->fetch($file, 'get', $cached_ok);
-}
-
-sub put {
-    my $class = shift;
-    my $file  = shift;
-    my $obj   = shift;
-    delete ($cache{$file->key});
-    delete($inverse_cache{$file->key});
-    return RiakFuse::HTTP->put($file->key, $obj);
-}
-
-sub delete {
-    my $class = shift;
-    my $file  = shift;
-    my $obj = shift;
-    delete($cache{$file->key});
-    delete($inverse_cache{$file->key});
-    return RiakFuse::HTTP->delete($file->key, $obj);
-}
+sub is_error { 0 }
 1;
