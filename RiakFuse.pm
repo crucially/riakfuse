@@ -240,36 +240,17 @@ sub my_rmdir {
     print "> rmdir ($file->{orig})\n" if($params{trace} > 3);
     RiakFuse::Stats->increment("rmdir");
 
-    for(1..5) {
+    my $entry = RiakFuse::MetaData->get($conf, $file);
 
-	my $dir = RiakFuse::Data->get($file->parent);
-	return -ENOTDIR() if $dir == -ENOENT();
-	return $dir unless ref $dir;
-	return -ENOENT() unless $dir->{content}->{$file->name};
+    return $entry->errno if ($entry->is_error);
 
+    return -ENOTDIR() unless $entry->is_directory;
+    return -ENOTEMPTY() if @{$entry->children};
 
-	#our first try only
-	if($_ == 1) {
-	    my $obj = RiakFuse::Data->get($file);
-	    return $obj unless ref $obj; #got an error back
-	    return -ENOTEMPTY() if(ref($obj->{content}) && keys %{$obj->{content}} > 2); #not empty
-	    return -ENOTDIR() unless ref $obj->{content}; #xxx will accept any application/json assumes those are the only dirs
-	}
+    my $parent = RiakFuse::MetaData->get($conf, $file->parent);
+    $parent->remove_child($conf, $entry);
 
-	my $rv = RiakFuse::Data->delete($file);
-	return $rv if($rv < 0 && $_ == 1);
-
-
-	delete ($dir->{content}->{$file->name});
-	$dir->{'if-match'} = $dir->{'etag'};
-	
-
-	$rv = RiakFuse::Data->put($file->parent, $dir);
-	next if $rv == 1; #retry
-	return $rv if $rv < 0;
-	return 0;
-    }
-    return -EIO();
+    return 0;
 }
 
 sub my_unlink {
