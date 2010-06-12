@@ -9,7 +9,7 @@ use RiakFuse;
 
 
 use Getopt::Long;
-
+use RiakFuse::Conf;
 my $fsname;
 my @servers;
 my $clean = 0;
@@ -17,10 +17,12 @@ my $mountpoint;
 my $trace = 0;
 my $debug = 0;
 my $mountopt;
+my $mdname;
 
 GetOptions("clean"     => \$clean,
 	   "server=s"  => \@servers,
 	   "fsname=s"  => \$fsname,
+	   "mdname=s"  => \$mdname,
 	   "mount=s"   => \$mountpoint,
 	   "trace=i"   => \$trace,  
 	   "debug=i"   => \$debug,
@@ -31,17 +33,20 @@ die "Please tell me what server I should be using (--server=127.0.0.1:8091)\n" u
 die "Please tell me the name of the filesystem (--fsname=mytestfs) (maps to a bucket)\n" unless $fsname;
 die "Please tell me where to mount it (--mount=/tmp/myfs) (where to mount)\n" unless $mountpoint;
 
-RiakFuse::conf(
+my $conf = RiakFuse::Conf->new(
     mountpoint => "$mountpoint",
     mountopt => $mountopt,
     trace => $trace,
     debug => $debug,
-    threaded => 1,
+    threaded => 0,
     bufferdir => "/tmp/buffer",
     filebucket => "$fsname",
+    mdbucket => $mdname,
     logbucket => "filesystem1_log",
     servers => \@servers,
     );
+
+RiakFuse->run($conf);
 
 
 
