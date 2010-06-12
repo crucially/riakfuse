@@ -4,6 +4,9 @@ package RiakFuse::MetaData;
 use strict;
 use warnings;
 use HTTP::Date;
+use RiakFuse::Error;
+use POSIX qw(EIO ENOENT ENOSYS EEXIST EPERM O_RDONLY O_RDWR O_APPEND O_CREAT);
+
 $RiakFuse::Test::MergeSleep = 0;
 
 our %headers = (
@@ -42,7 +45,7 @@ sub new {
     $self->{mtime}  = $params{mtime} || 0;
     $self->{ctime}  = $params{ctime} || time;
     $self->{mode}   = $params{mode}  || die "no mode";
-    $self->{type}   = 0040;
+    $self->{type}   = $params{type};
     return $self;
 }
 
@@ -55,12 +58,21 @@ sub get {
 
     my $request = HTTP::Request->new("GET", $conf->mdurl . $path);
 
-
+    my $response;
     for (1..100) {
 	# make sure we can get all copies in here
 	$request->header("Accept", "multipart/mixed, */*;q=0.5");
 
-	my $response = LWP::UserAgent->new->request($request);
+	$response = LWP::UserAgent->new->request($request);
+
+	if ($response->code == 404) {
+	    # object does not exist
+	    return RiakFuse::Error->new(
+		response => $response,
+		errno    => -ENOENT()
+		);
+
+	}
 
 	if($response->code == 300) {
 	    # need to merge the different changes and then restart
@@ -77,6 +89,7 @@ sub get {
 	}
 	$dirent->{link} = $response->header("Link");
 	$dirent->{mtime} = str2time($response->header("Last-Modified"));
+	$dirent->{size}  = $response->header('Content-Length') unless $dirent->{size};
 
 	if ($dirent->{type} == 32) {
 	    bless $dirent, "RiakFuse::MetaData::Directory";
@@ -85,7 +98,13 @@ sub get {
 	}
 	return $dirent;
     }
+    return RiakFuse::Error->new(
+	response => $response,
+	errno    => -EIO(),
+	);
 }
+
+sub is_error { 0 }
 
 
 sub attr {
@@ -119,7 +138,14 @@ sub attr {
     $request->header("X-Riak-Meta-RFS-client-timestamp", time());
     $request->header("X-Riak-Meta-Rfs-Action", 'attr');
 
-    LWP::UserAgent->new->request($request);
+    my $response = LWP::UserAgent->new->request($request);
+
+    if (!$response->is_success) {
+      RiakFuse::Error->new(
+	  response => $response,
+	  errno    => -EIO(),
+	  );
+    }
 }
 
 
@@ -207,11 +233,6 @@ sub merge {
     }
     $request->push_header("Link", $buffer) if($buffer);
     $request->header("Content-Type", "text/plain");
-#    $request->header("X-Riak-Meta-RFS-client-timestamp", time());
-
-
-#    print $response->as_string;
-#    print $request->as_string;
     
     LWP::UserAgent->new()->request($request);
 }

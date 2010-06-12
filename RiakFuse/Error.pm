@@ -16,5 +16,7 @@ sub new {
     return $self;
 }
 
+sub is_error { 1 };
+
 
 1;
