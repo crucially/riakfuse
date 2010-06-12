@@ -52,14 +52,16 @@ sub run {
 	    statfs  => 'RiakFuse::my_statfs',
 	    getdir =>"RiakFuse::my_getdir",
 	    mknod  => "RiakFuse::my_mknod",
+	    mkdir => "RiakFuse::my_mkdir",
+	    rmdir => "RiakFuse::my_rmdir",
 #	    utime => "RiakFuse::my_utime",
 #	    write  => "RiakFuse::my_write",
 #	    read   => "RiakFuse::my_read",
 #	    truncate => "RiakFuse::my_truncate",
 #	    open   =>"RiakFuse::my_open",
-#	    mkdir => "RiakFuse::my_mkdir",
+
 #	    unlink => "RiakFuse::my_unlink",
-#	    rmdir => "RiakFuse::my_rmdir",
+
 #	    rename => "RiakFuse::my_rename",
 #	    chmod => "RiakFuse::my_chmod",
 #	    chown => "RiakFuse::my_chown",
@@ -300,57 +302,6 @@ sub my_unlink {
     return -EIO();
 }
 
-sub my_mkdir {
-    my $file = RiakFuse::Filepath->new(shift());
-    print "> mkdir " . $file->key . "\n" if($params{trace} > 3);
-    RiakFuse::Stats->increment("mkdir");
-    my $mode = shift;
-    my $type = $mode >> 9;
-    $mode = ($mode - ($type << 9));
-
-    for (1..5) {
-	my $parent = RiakFuse::Data->get($file->parent);
-	
-	if($parent->{content}->{$file->name}) {
-	    return -EEXIST();
-	}
-	
-	my $rv = RiakFuse::Data->put($file,
-				     {
-					 content => {
-				    '.' => {},
-				    '..' => {},
-					 },
-					 'content-type' => 'application/json',
-					 'if-match' => ''
-				     });
-	# should do a repair here maybe XXX
-	return $rv if $rv < 0;
-	
-	$parent->{content}->{$file->name} = {
-	    atime => time,
-	    ctime => time,
-	    filename => $file->orig,
-	    mode => $mode,
-	    type => $type,
-	    uid  => fuse_get_context()->{"uid"},
-	    gid  => fuse_get_context()->{"gid"},
-	};
-	$parent->{'if-match'} = $parent->{'etag'};
-	$rv = RiakFuse::Data->put($file->parent, $parent);
-
-	return $rv if $rv <= 0;
-	if ($rv == 1) {
-	    # we got a precondition failed
-	    # time to retry
-	    next;
-	} else {
-	    die "unknown rv value $rv\n";
-	}
-    }
-
-    return -EIO();
-}
 
 
 sub my_open {
@@ -412,6 +363,37 @@ sub my_write {
 	return $error if($error != 0);
     }
     return $len;
+}
+
+
+sub my_mkdir {
+    my $file = RiakFuse::Filepath->new(shift());
+    print "> mkdir " . $file->key . "\n" if($params{trace} > 3);
+    RiakFuse::Stats->increment("mkdir");
+    my $mode = shift;
+    my $type = $mode >> 9;
+    $mode = ($mode - ($type << 9));
+
+
+    my $exists = RiakFuse::MetaData->get($conf, $file);
+
+    if (!$exists->is_error) {
+      return -EEXIST();
+    } elsif ($exists->is_error && $exists->{errno} != -ENOENT()) {
+      return $exists->{errno};
+    }
+
+    my $entry = RiakFuse::MetaData::Directory->new(
+					     path => $file,
+					     gid  => fuse_get_context()->{"gid"},
+					     uid  => fuse_get_context()->{"uid"},
+					     mode => $mode,
+					     type => $type,
+					    );
+
+    my $parent = RiakFuse::MetaData->get($conf, $file->parent);
+    $parent->add_child($conf, $entry);
+    return 0;
 }
 
 
