@@ -218,9 +218,10 @@ sub merge {
     
     if (@attr) {
 	foreach my $attr ( sort { $a->header("X-Riak-Meta-RFS-client-timestamp") <=>  $b->header("X-Riak-Meta-RFS-client-timestamp") } @attr) {
-	    $request->header("X-Riak-Meta-RFS-Gid", $attr->header("X-Riak-Meta-RFS-Gid")) if($request->header("X-Riak-Meta-RFS-Gid"));
-	    $request->header("X-Riak-Meta-RFS-Uid", $attr->header("X-Riak-Meta-RFS-Uid")) if($request->header("X-Riak-Meta-RFS-Uid"));
-	    $request->header("X-Riak-Meta-RFS-Mode", $attr->header("X-Riak-Meta-RFS-Mode")) if($request->header("X-Riak-Meta-RFS-Mode"));
+	    $request->header("X-Riak-Meta-RFS-Gid", $attr->header("X-Riak-Meta-RFS-Gid")) if($attr->header("X-Riak-Meta-RFS-Gid"));
+	    $request->header("X-Riak-Meta-RFS-Uid", $attr->header("X-Riak-Meta-RFS-Uid")) if($attr->header("X-Riak-Meta-RFS-Uid"));
+	    $request->header("X-Riak-Meta-RFS-Mode", $attr->header("X-Riak-Meta-RFS-Mode")) if($attr->header("X-Riak-Meta-RFS-Mode"));
+	    $request->header("X-Riak-Meta-RFS-Size", $attr->header("X-Riak-Meta-RFS-Size")) if($attr->header("X-Riak-Meta-RFS-Size"));
 	}
     }
 
