@@ -3,55 +3,34 @@ use strict;
 use warnings;
 
 use Getopt::Long;
+use Storable qw(freeze thaw);
+use RiakFuse::MKFS;
 
 my $fsname;
 my $server;
 my $clean = 0;
+my $mdbucket;
 
 GetOptions("clean"     => \$clean,
 	   "server=s"  => \$server,
 	   "fsname=s"  => \$fsname,
+	   "mdbucket=s" => \$mdbucket,
     );
+
+
 die "Please tell me what server I should be using (--server=127.0.0.1:8091)\n" unless $server;
 die "Please tell me the name of the filesystem (--fsname=mytestfs) (maps to a bucket)\n" unless $fsname;
+$mdbucket ||= $fsname . "_metadata";
+
 
 use LWP::UserAgent;
-use JSON;
+
 my %OPTS = @LWP::Protocol::http::EXTRA_SOCK_OPTS;
 $OPTS{MaxLineLength} = 4194304;
 @LWP::Protocol::http::EXTRA_SOCK_OPTS = %OPTS;
 
 if($clean) {
-    my $resp = LWP::UserAgent->new->request(HTTP::Request->new("GET", "http://$server/riak/$fsname?keys=yes&props=false"));
+    RiakFuse::MKFS->clean($server, $fsname, $mdbucket);
 
-    my $keys = from_json($resp->content);
-    foreach my $key (@{$keys->{keys}}) {
-	print "delete $key\n";
-	print LWP::UserAgent->new->request(
-	    HTTP::Request->new("DELETE", "http://$server/riak/$fsname/$key")
-	    )->code . "\n";
-    }
 }
-{
-
-
-    my $req = HTTP::Request->new("PUT", "http://$server/riak/$fsname/%2F");
-    $req->content_type("application/json");
-
-    $req->content(to_json({
-	'.' => {
-	    key => '%2F',
-	    ctime => time,
-	    atime => time,
-	    uid  => $<,
-	    gid  => int($(),
-	    mode => 0755,
-	    type => 0040,
-	},
-	'..' => {}
-			  
-			  }));
-
-    my $resp = LWP::UserAgent->new->request($req);
-    print $resp->status_line ."\n";
-}
+RiakFuse::MKFS->make($server, $fsname, $mdbucket);
