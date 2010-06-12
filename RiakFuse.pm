@@ -64,7 +64,7 @@ sub run {
 
 
 
-#	    rename => "RiakFuse::my_rename",
+	    rename => "RiakFuse::my_rename",
 #	    chmod => "RiakFuse::my_chmod",
 #	    chown => "RiakFuse::my_chown",
 #	    flush => "RiakFuse::my_flush",
@@ -211,30 +211,7 @@ sub my_flush {
 sub my_rename {
     my $old = RiakFuse::Filepath->new(shift());
     my $new = RiakFuse::Filepath->new(shift());
-    print "> rname ( ".$old->orig ." -> ". $new->orig ." )\n" if($params{trace} > 3);
-    RiakFuse::Stats->increment("rename");
-    my $old_parent = RiakFuse::Data->get($old->parent);
-    
-    if($old_parent->{content}->{$old->name}->{type} == 32) {
-	return -EACCES();
-    }
-
-    my $data = RiakFuse::Data->get($old);
-    delete($data->{'x-riak-vclock'});
-    RiakFuse::Data->put($new, $data);
-
-    my $content;
-    {
-	my $dir = RiakFuse::Data->get($old->parent);
-	$content = delete($dir->{content}->{$old->name});
-	RiakFuse::Data->put($old->parent, $dir);
-    }
-    {
-	my $dir = RiakFuse::Data->get($new->parent);
-	$dir->{content}->{$new->name} = $content;
-	RiakFuse::Data->put($new->parent, $dir);
-    }
-    RiakFuse::Data->delete($old);
+    return -EIO();
 }
 
 sub my_rmdir {
