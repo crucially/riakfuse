@@ -39,6 +39,11 @@ sub mdurl {
     return "http://" . $self->server . "/riak/$self->{mdbucket}/";
 }
 
+sub fsurl {
+    my $self = shift;
+    return "http://" . $self->server . "/riak/$self->{filebucket}/";
+}
+
 
 
 
