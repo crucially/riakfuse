@@ -24,6 +24,8 @@ sub children {
     foreach my $link (split "," , $self->{link}) {
 	my ($path) = $link =~/\<.+\%2F(.+?)\>; riaktag=\"child\"/;
 	next unless $path;
+	$path =~s/\+/ /g;
+	$path =~s/%2B/+/g;
 	push @path, $path;
 
     }
@@ -44,7 +46,7 @@ sub add_child {
 	$request->header("X-Riak-Meta-Rfs-Action" , "create");
 	$request->header("Content-Type", "text/plain");
 	$request->header("X-Riak-Meta-RFS-client-timestamp", time());
-	
+
 	LWP::UserAgent->new()->request($request);
     }
     {
