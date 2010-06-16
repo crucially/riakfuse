@@ -60,7 +60,8 @@ sub add_child {
 	LWP::UserAgent->new()->request($request);
     }
 
-    
+    $parent->clear_cache($parent->{key});
+    $parent->clear_cache($child->{key});
     
 }
 
@@ -81,6 +82,8 @@ sub remove_child {
 
     my $delete = HTTP::Request->new("DELETE", $conf->mdurl . $child->{key});
     LWP::UserAgent->new()->request($delete);
+    $parent->clear_cache($child->{key});
+    $parent->clear_cache($child->{key});
 }
 
 

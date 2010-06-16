@@ -8,6 +8,9 @@ use RiakFuse::Error;
 use POSIX qw(EIO ENOENT ENOSYS EEXIST EPERM O_RDONLY O_RDWR O_APPEND O_CREAT);
 
 $RiakFuse::Test::MergeSleep = 0;
+my %OPTS = @LWP::Protocol::http::EXTRA_SOCK_OPTS;
+$OPTS{MaxLineLength} = 500_000;
+@LWP::Protocol::http::EXTRA_SOCK_OPTS = %OPTS;
 
 our %headers = (
     'X-Riak-Meta-RFS-ctime'  => 'ctime',
@@ -27,7 +30,7 @@ foreach my $header (keys %headers) {
     $headers_r{$headers{$header}} = $header;
 }
 
-
+our %cache : shared;
 
 
 
@@ -49,6 +52,11 @@ sub new {
     return $self;
 }
 
+sub clear_cache {
+    my $self = shift;
+    my $path = shift;
+    delete ($cache{$path});
+}
 
 sub get {
     my $self = shift;
@@ -58,12 +66,27 @@ sub get {
 
     my $request = HTTP::Request->new("GET", $conf->mdurl . $path);
 
+    # in same second just ignore things
+    if(exists $cache{$path} && $cache{$path}->{fetch_time} == time) {
+	return $cache{$path};
+    }
+
     my $response;
     for (1..100) {
 	# make sure we can get all copies in here
+
 	$request->header("Accept", "multipart/mixed, */*;q=0.5");
 
+	$request->header("If-None-Match", $cache{$path}->{etag}) if (exists $cache{$path});
+
 	$response = LWP::UserAgent->new->request($request);
+
+	if ($response->code == 304) {
+	    $cache{$path}->{fetch_time} = time;
+	    return $cache{$path} 
+	} else {
+	    delete $cache{$path};
+	}
 
 	if ($response->code == 404) {
 	    # object does not exist
@@ -90,12 +113,19 @@ sub get {
 	$dirent->{link} = $response->header("Link");
 	$dirent->{mtime} = str2time($response->header("Last-Modified"));
 	$dirent->{size}  = $response->header('Content-Length') unless $dirent->{size};
-
+	$dirent->{etag}  = $response->header('ETag');
+	$dirent->{fetch_time} = time;
+	
+	die $response->as_string unless defined $dirent->{type};
+	
 	if ($dirent->{type} == 32) {
 	    bless $dirent, "RiakFuse::MetaData::Directory";
 	} else {
 	    bless $dirent, "RiakFuse::MetaData::File";
 	}
+	$cache{$path} = $dirent;
+
+
 	return $dirent;
     }
     return RiakFuse::Error->new(
@@ -106,13 +136,38 @@ sub get {
 
 sub is_error { 0 }
 
+sub size {
+    my $class = shift;
+    my $conf = shift;
+    my $path = shift;
+    my $size = shift;
+    my $cache_only = shift || 0;
+    
+
+    if ($cache_only && $cache{$path->key}) {
+	$cache{$path->key}->{size} = $size;
+	$cache{$path->key}->{size_changed}++;
+    } else {
+	my $request = HTTP::Request->new("POST", $conf->mdurl . $path->key);
+	$request->header("Content-Type", "text/plain");
+	$request->header("X-Riak-Meta-Rfs-size", $size);
+	$request->header("X-Riak-Meta-RFS-client-timestamp", time());
+	$request->header("X-Riak-Meta-Rfs-Action", 'attr');
+
+	LWP::UserAgent->new->request($request);
+	delete $cache{$path->key};
+    }
+    
+    
+
+}
 
 sub attr {
     my $self = shift;
     my $conf  = shift;
     my %attr = @_;
     
-
+    $self->clear_cache($self->{key});
 
     my $request = HTTP::Request->new("POST", $conf->mdurl . $self->{key});
 
@@ -229,7 +284,7 @@ sub merge {
 
     foreach my $link (keys %links) {
 	$buffer .= "<$link>; riaktag=\"child\" ,";
-	if( length($buffer) > 7000) {
+	if( length($buffer) > 3000) {
 	    $request->push_header("Link", $buffer);
 	    $buffer .= "";
 	}
