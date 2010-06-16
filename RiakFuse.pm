@@ -38,7 +38,7 @@ our %servers : shared;
 our @servers : shared;
 our %open_paths;
 our $conf;
-our %params = (trace => 0);
+our %params = (trace => 10);
 sub run {
     my $class = shift;
     $conf = shift;
@@ -71,7 +71,7 @@ sub run {
 	    release => "RiakFuse::my_release",
 #	    setxattr => "RiakFuse::my_setxattr",
 #	    getxattr => "RiakFuse::my_getxattr",
-#	    );
+
 	);
     
 }
@@ -193,11 +193,7 @@ sub my_release {
     my $file = RiakFuse::Filepath->new(shift());
     print "> release (".$file->orig.")\n" if($params{trace} > 3);
     RiakFuse::Stats->increment("release");
-    return 0;
-    if($open_paths{$file->key}) {
-	$open_paths{$file->key}--;
-	delete $open_paths{$file->key} unless $open_paths{$file->key};
-    }
+    RiakFuse::Data->release($conf, $file);
     return 0;
 }
 
@@ -205,11 +201,7 @@ sub my_flush {
     my $file = RiakFuse::Filepath->new(shift());
     print "> flush (".$file->orig.")\n" if($params{trace} > 3);
     RiakFuse::Stats->increment("flush");
-    return 0;
-    if($open_paths{$file->key}) {
-	my $obj = RiakFuse::Data->get($file,1);
-	RiakFuse::Data->put($file,$obj);
-    }
+    RiakFuse::Data->save($conf, $file);
     return 0;
 }
 
@@ -265,14 +257,12 @@ sub my_open {
     return RiakFuse::Stats->stats_open($file) if ($file->orig =~/^\/.riakfs/);
 
     my $flags = shift;
-    return 0;
-    my $obj = RiakFuse::Data->get($file);
-    if(ref($obj)) {
-	$open_paths{$file->key}++;
-	return 0;
-    } else {
-	return $obj;
+
+    my $data = RiakFuse::Data->open($conf,$file);
+    if ($data->is_error) {
+	return $data->{errno};
     }
+    return 0;
 }
 
 sub my_truncate {
@@ -297,12 +287,9 @@ sub my_read {
 #    return RiakFuse::Stats->stats_read($file, $request_size, $offset) if ($file->orig =~/^\/.riakfs/);
 
  
-    print "my_read\n";
-    my $content = RiakFuse::Data->fetch($conf, $file);
-
+    my $content = RiakFuse::Data->read($conf, $file);
     return $content->{errno} if ($content->is_error);
-
-    return substr($content->{content}, $offset, $request_size);
+    return substr(${$content->{content}}, $offset, $request_size);
 }
 
 
@@ -313,11 +300,13 @@ sub my_write {
     my $buffer = shift;
     my $offset = shift;
     my $len = length($buffer);
-    my $content = RiakFuse::Data->fetch($conf, $file);
-    my $written = substr($content->{content}, $offset, $len, $buffer);
-    $content->save($conf);
-    my $metadata = RiakFuse::MetaData->get($conf, $file);
-    $metadata->attr($conf, size => length($content->{content}));
+    my $content = RiakFuse::Data->write($conf, $file);
+    my $written = substr(${$content->{content}}, $offset, $len, $buffer);
+    if (!$content->{open}) {
+	RiakFuse::Data->save($conf, $file);
+	RiakFuse::MetaData::File->size($conf, $file, length(${$content->{content}}), $content->{open});
+    }
+
     return $len;
 }
 
