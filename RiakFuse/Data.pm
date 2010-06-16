@@ -54,12 +54,11 @@ sub read {
     } else {
 
 	my $content = $class->fetch($conf, $path, $etag{$path->key});
-	return bless { open => 0, content => \$data{$path->key}, etag => $etag{$path->key}} if(!$content);
 	return $content if $content->is_error;
 
 
     }
-
+    return bless { open => 0, content => \$data{$path->key}, etag => $etag{$path->key}};
 }
 
 
@@ -122,7 +121,7 @@ sub fetch {
 	return $self;
     }
 
-    return RiakFuse::Error->new(response => $response, errno => -EIO());    
+    return RiakFuse::Error->new(response => $response, errno => -EIO(), request => $request);    
 }
 
 sub save {
@@ -131,6 +130,7 @@ sub save {
     my $path = shift;
 
     print "Saving " . $path->key . "\n";
+    return unless $modified{$path->key};
     my $request = HTTP::Request->new("POST", $conf->fsurl . $path->key);
     $request->header("Content-Type" => "text/plain");
     $request->content($data{$path->key});
